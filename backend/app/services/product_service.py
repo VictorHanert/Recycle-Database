@@ -1,0 +1,191 @@
+"""Service class for product operations using the repository pattern."""
+from typing import List, Optional, Tuple
+
+from fastapi import HTTPException, status
+
+from app.models.product import Product
+from app.schemas.product import ProductCreate, ProductFilter, ProductUpdate, ProductResponse
+from app.repositories.base import ProductRepositoryInterface, UserRepositoryInterface
+
+
+class ProductService:
+    """Service class for product operations using the repository pattern."""
+    
+    def __init__(self, product_repository: ProductRepositoryInterface, user_repository: UserRepositoryInterface):
+        self.product_repository = product_repository
+        self.user_repository = user_repository
+
+    def get_all_details(self):
+        """Fetch all colors, materials, and tags for product details dropdowns/filters."""
+        return self.product_repository.get_product_details_options()
+
+    def get_all_categories(self):
+        """Get all product categories"""
+        return self.product_repository.get_all_categories()
+
+    def create_product(self, product: ProductCreate, seller_id: int) -> Product:
+        """Create a new product listing"""
+        return self.product_repository.create(product, seller_id)
+
+    def get_product_by_id(self, product_id: int, current_user_id: Optional[int] = None) -> Optional[ProductResponse]:
+        """Get product by ID with all details and counters"""
+        product = self.product_repository.get_by_id(product_id, load_details=True)
+        
+        if not product:
+            return None
+        
+        # Check if user can access this product
+        if current_user_id != product.seller_id:  # Not the owner
+            if product.status not in ['active', 'sold']:
+                return None  # Deny access to paused/draft products
+        
+        # Record view for authenticated users (not the seller)
+        if current_user_id and current_user_id != product.seller_id:
+            self.product_repository.record_view(product_id, current_user_id)
+            # Re-query to get updated data
+            product = self.product_repository.get_by_id(product_id, load_details=True)
+        
+        # Use Pydantic schema for response
+        product_response = ProductResponse.model_validate(product)
+        # The counts are set in the repository layer already
+        return product_response
+
+    def get_products(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+        filter_params: Optional[ProductFilter] = None
+    ) -> Tuple[List[Product], int]:
+        """Get products with filtering and pagination"""
+        products = self.product_repository.get_all_filtered(
+            filters=filter_params,
+            skip=skip,
+            limit=limit,
+            load_details=False
+        )
+        
+        total = self.product_repository.count_filtered(filter_params)
+        
+        return products, total
+
+    def get_products_by_seller(self, seller_id: int, skip: int = 0, limit: int = 20) -> Tuple[List[Product], int]:
+        """Get products by seller with pagination"""
+        products = self.product_repository.get_by_seller(seller_id, skip, limit)
+        total = self.product_repository.count_by_seller(seller_id)
+        return products, total
+
+    def get_products_by_category(self, category: str, skip: int = 0, limit: int = 20) -> Tuple[List[Product], int]:
+        """Get products by category with pagination"""
+        products = self.product_repository.get_by_category(category, skip, limit)
+        # For category filtering, we need to count separately since repository doesn't have this method
+        # We'll use get_by_category for both count and data for simplicity
+        # In a real implementation, you might add a count_by_category method to the repository
+        all_products = self.product_repository.get_by_category(category, skip=0, limit=10000)
+        total = len(all_products)
+        return products, total
+
+    def update_product(self, product_id: int, product_update: ProductUpdate, user_id: int, is_admin: bool = False) -> Product:
+        """Update an existing product"""
+        product = self.product_repository.get_by_id(product_id)
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+
+        # Check if user owns the product (skip for admin)
+        if not is_admin and product.seller_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to update this product"
+            )
+
+        return self.product_repository.update(product_id, product_update)
+
+    def delete_product(self, product_id: int, user_id: int) -> bool:
+        """Delete a product (soft delete, only owner can delete)"""
+        product = self.product_repository.get_by_id(product_id)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        if product.seller_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to delete this product"
+            )
+        
+        return self.product_repository.soft_delete(product_id)
+
+    def force_delete_product(self, product_id: int) -> bool:
+        """Force delete a product (admin only, hard delete)"""
+        return self.product_repository.delete(product_id)
+
+    def get_platform_statistics(self) -> dict:
+        """Get platform statistics"""
+        return self.product_repository.get_platform_statistics()
+
+    def search_products(self, query: str, skip: int = 0, limit: int = 20) -> List[Product]:
+        """Search products by title or description"""
+        return self.product_repository.search_by_title(query, skip, limit)
+
+    def get_recent_products(self, limit: int = 10) -> List[Product]:
+        """Get most recently created products"""
+        return self.product_repository.get_recent_products(limit)
+
+    def mark_product_as_sold(self, product_id: int, user_id: int, is_admin: bool = False) -> Product:
+        """Mark a product as sold"""
+        product = self.product_repository.get_by_id(product_id)
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+
+        # Check if user owns the product (skip for admin)
+        if not is_admin and product.seller_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to modify this product"
+            )
+
+        # Use update method with status change
+        update_data = ProductUpdate.model_validate({"status": "sold"})
+        return self.product_repository.update(product_id, update_data)
+
+    def get_product_statistics(self) -> dict:
+        """Get general product statistics"""
+        # This would need additional repository methods to be implemented properly
+        # For now, returning a basic structure
+        return {
+            "total_products": 0,  # Would need count_all method in repository
+            "active_products": 0,  # Would need count_by_status method
+            "sold_products": 0,
+            "recent_products": len(self.get_recent_products())
+        }
+
+    def toggle_product_status(self, product_id: int, user_id: int, is_admin: bool = False) -> Product:
+        """Toggle product between active and paused status"""
+        product = self.product_repository.get_by_id(product_id)
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+
+        # Check if user owns the product (skip for admin)
+        if not is_admin and product.seller_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to modify this product"
+            )
+
+        # Toggle between active and paused
+        new_status = "paused" if product.status == "active" else "active"
+        update_data = ProductUpdate.model_validate({"status": new_status})
+        return self.product_repository.update(product_id, update_data)
