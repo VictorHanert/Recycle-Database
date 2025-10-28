@@ -1,39 +1,35 @@
-# Fullstack Project
-## Tech Stack
+# Database Course Backend Project
 
-### Frontend
-- **React** with Vite
-- **React Router** for navigation
-- **Tailwind CSS and MUI** for styling
-- **Context API** for state management
+A FastAPI-based backend showcasing database integration with MySQL, MongoDB, and Neo4j.
+
+## Tech Stack
 
 ### Backend
 - **Python** with FastAPI
-- **SQLAlchemy** ORM
+- **SQLAlchemy** ORM for MySQL
 - **Pydantic** for data validation
 - **JWT** authentication
-- **CORS** middleware
+- **Repository Pattern** for database abstraction
 
 ### Databases
-- **MySQL** (primary database)
-- **MongoDB** (document store)
-- **Neo4j** (graph database)
-
-### Testing
-- **Jest** for frontend testing
-- **Pytest** for backend testing
+- **MySQL** (primary relational database)
+- **MongoDB** (document store) - *planned*
+- **Neo4j** (graph database) - *planned*
 
 ### Development & Deployment
 - **Docker** & Docker Compose
-- **Poetry** for Python dependency management
-- **ESLint** for code linting
+- **Poetry** for dependency management
 
 ## Getting Started
 
 ### Start the Application
 
 ```bash
-# Start platform
+# Start all services (backend + databases)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
 
 # Stop all services
 docker-compose down
@@ -45,10 +41,9 @@ cd backend
 poetry install
 poetry run python seed.py
 ```
+## API Access Points
 
-## Access Points
-
-- **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs (Swagger UI)
-- **API Documentation**: http://localhost:8000/redoc (ReDoc)
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
