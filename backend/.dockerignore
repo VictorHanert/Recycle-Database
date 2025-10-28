@@ -1,0 +1,59 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+*.cover
+.hypothesis
+
+# Logs
+*.log
+logs/
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+README.md
+docs/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Poetry
+poetry.lock
+
+# Uploads (user-generated content)
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
