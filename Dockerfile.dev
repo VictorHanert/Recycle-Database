@@ -1,0 +1,24 @@
+# Development Dockerfile (used by docker-compose)
+FROM python:3.13-slim
+
+# Install Poetry
+RUN pip install --no-cache-dir poetry==1.8.3
+
+# Set working directory
+WORKDIR /code
+
+# Copy poetry files
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies (including dev dependencies for development)
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi --no-root
+
+# Copy application code (though docker-compose will mount volume over this)
+COPY ./app ./app
+
+# Expose port
+EXPOSE 8000
+
+# Development command (overridden by docker-compose)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

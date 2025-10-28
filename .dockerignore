@@ -1,52 +1,88 @@
 # Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
 *.egg
-*.egg-info
-dist
-build
+*.egg-info/
+dist/
+build/
+.Python
 
-# Environment
-.env
-.env.local
-.env.*.local
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+poetry.lock
 
 # Testing
-.pytest_cache
+.pytest_cache/
 .coverage
-htmlcov
+.coverage.*
+htmlcov/
 *.cover
-.hypothesis
+.hypothesis/
+.tox/
+tests/
+test_*.py
+*_test.py
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Docker
+Dockerfile
+Dockerfile.*
+.dockerignore
+docker-compose*.yml
 
 # Logs
 *.log
 logs/
 
-# IDEs
-.vscode
-.idea
-*.swp
-*.swo
-*~
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Git
-.git
-.gitignore
-.github
+# Scripts (not needed in production)
+scripts/
+seed.py
 
-# Documentation
-*.md
-README.md
-docs/
+# Alembic versions (migrations applied separately)
+alembic/versions/
 
-# Docker
-Dockerfile
-.dockerignore
-docker-compose*.yml
+# Development files
+.pylintrc
+.editorconfig
+.pre-commit-config.yaml
+mypy.ini
+setup.cfg
+
+# Uploads (handle separately via volumes)
+uploads/
 
 # Poetry
 poetry.lock

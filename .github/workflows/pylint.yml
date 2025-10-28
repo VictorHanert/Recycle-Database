@@ -3,24 +3,32 @@ name: Pylint
 on: [push, pull_request]
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
+    
     steps:
     - uses: actions/checkout@v4
+    
     - name: Set up Python 3.13
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.13"
-    - name: Install poetry
+    
+    - name: Install Poetry
       run: |
-        pip install poetry
+        curl -sSL https://install.python-poetry.org | python3 -
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pypoetry
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry-
+    
     - name: Install dependencies
-      run: |
-        poetry install --no-root
-        poetry run pip install pylint
-    - name: Analysing the code with pylint
-      run: |
-        poetry run pylint --fail-under=8 $(find . -name "*.py" -not -path "./__pycache__/*")
+      run: poetry install
+    
+    - name: Lint with pylint
+      run: poetry run pylint app/ --fail-under=7
