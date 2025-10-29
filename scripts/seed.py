@@ -5,7 +5,7 @@ from faker import Faker
 import requests
 from sqlalchemy.orm import Session
 
-from app.db.mysql import SessionLocal, create_tables, drop_tables
+from app.db.mysql import SessionLocal
 from app.models.user import User
 from app.models.location import Location
 from app.models.category import Category
@@ -20,13 +20,6 @@ from app.models.item_views import ItemView
 from app.services.auth_service import AuthService
 
 fake = Faker("en_US")
-
-# -----------------
-# DB Reset
-# -----------------
-def reset_db():
-    drop_tables()
-    create_tables()
 
 # -----------------
 # Seeders
@@ -294,11 +287,16 @@ def seed_conversations(session: Session, users, products):
 # MAIN
 # -----------------
 def main():
-    reset_db()
+    """
+    Seed the database with test data.
+    """
+    print("Starting database seeding...")
+    
     db = SessionLocal()
     try:
         locations = seed_locations(db)
         users = seed_users(db, 150, locations)
+        print(f"Seeded {len(users)} users.")
 
         admin_user = User(
             email="admin@test.com",
@@ -317,13 +315,13 @@ def main():
         categories = seed_categories(db)
         colors, materials, tags = seed_details(db)
         products = seed_products(db, users, categories, locations, colors, materials, tags)
+        print(f"Seeded {len(products)} products.")
         seed_sold_archive(db, products)
         seed_favorites(db, users, products)
         seed_views(db, users, products)
         seed_conversations(db, users, products)
 
-        print("✅ Users: 150 and Products: 100 (80 active, 20 sold)")
-        print("✅ Admin user: admin@test.com / admin123")
+        print("✅ Created admin user: admin@test.com / admin123")
     finally:
         db.close()
 
