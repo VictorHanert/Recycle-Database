@@ -12,7 +12,7 @@ from app.models.favorites import Favorite
 from app.models.item_views import ItemView
 from app.models.messages import Message, ConversationParticipant, Conversation
 from app.models.sold import SoldItemArchive
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user_schema import UserCreate, UserUpdate
 
 
 class MySQLUserRepository(UserRepositoryInterface):

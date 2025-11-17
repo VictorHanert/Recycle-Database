@@ -1,10 +1,9 @@
 """Products router for product-related operations."""
 from math import ceil
 from typing import List, Optional
-from pathlib import Path
-from uuid import uuid4
+import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 
 from app.db.mysql import get_db
 from app.dependencies import (
@@ -14,7 +13,7 @@ from app.dependencies import (
     get_repository_factory_dep
 )
 from app.models.user import User
-from app.schemas.product import (
+from app.schemas.product_schema import (
     ProductCreate,
     ProductFilter,
     ProductListResponse,
@@ -27,7 +26,7 @@ from app.schemas.product import (
     LocationInfo,
 )
 from app.services.product_service import ProductService
-from app.schemas.product import ProductDetailsResponse
+from app.schemas.product_schema import ProductDetailsResponse
 
 router = APIRouter()
 
@@ -134,54 +133,6 @@ async def get_all_product_details(
         locations=[LocationInfo.model_validate(loc) for loc in locations]
     )
 
-@router.post("/upload-image", response_model=dict)
-async def upload_product_image(
-    file: UploadFile = File(...)
-    # current_user: User = Depends(get_current_active_user),  # Temporarily disabled for testing
-):
-    """Upload a product image and return the URL"""
-    # File upload is a utility function, acceptable to keep direct implementation
-    # Validate file type
-    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
-    if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPEG, PNG, WebP, and GIF images are allowed"
-        )
-
-    # Validate file size (max 5MB)
-    content = await file.read()
-    file_size = len(content)
-
-    if file_size > 5 * 1024 * 1024:  # 5MB
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size must be less than 5MB"
-        )
-
-    # Create uploads directory if it doesn't exist
-    upload_dir = Path("uploads/product_images")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate unique filename
-    if file.filename is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Filename is required"
-        )
-    file_extension = Path(file.filename).suffix.lower()
-    unique_filename = f"{uuid4()}{file_extension}"
-    file_path = upload_dir / unique_filename
-
-    # Save file
-    with open(file_path, "wb") as buffer:
-        buffer.write(content)
-
-    # Create URL (in production, this would be a cloud storage URL)
-    image_url = f"/uploads/product_images/{unique_filename}"
-
-    return {"url": image_url, "filename": unique_filename}
-
 @router.get("/category/{category}", response_model=ProductListResponse)
 async def get_products_by_category(
     category: str,
@@ -220,28 +171,72 @@ async def get_product(
 
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 async def create_product(
-    product: ProductCreate,
+    product_data: str = Form(...),
+    images: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_active_user),
     product_service: ProductService = Depends(get_product_service)
 ):
-    """Create a new product listing"""
-    db_product = product_service.create_product(product, current_user.id)
+    """Create a new product listing with optional images."""
+    try:
+        product_dict = json.loads(product_data)
+        product = ProductCreate.model_validate(product_dict)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON in product_data: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid product data: {str(e)}"
+        )
+
+    # Create product with images (if any)
+    db_product = await product_service.create_product(
+        product=product,
+        seller_id=current_user.id,
+        image_files=images if images else None
+    )
+
     return ProductResponse.model_validate(db_product)
 
 @router.put("/{product_id}", response_model=ProductResponse)
 async def update_product(
     product_id: int,
-    product_update: ProductUpdate,
+    product_data: str = Form(...),
+    images: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_active_user),
     product_service: ProductService = Depends(get_product_service)
 ):
-    """Update a product listing"""
-    db_product = product_service.update_product(product_id, product_update, current_user.id)
+    """Update a product listing with optional new images."""
+    try:
+        product_dict = json.loads(product_data)
+        product_update = ProductUpdate.model_validate(product_dict)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON in product_data: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid product data: {str(e)}"
+        )
+
+    # Update product with optional new images
+    db_product = await product_service.update_product(
+        product_id=product_id,
+        product_update=product_update,
+        user_id=current_user.id,
+        image_files=images if images else None
+    )
+
     if not db_product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found or you don't have permission to update it"
         )
+
     return ProductResponse.model_validate(db_product)
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -251,7 +246,7 @@ async def delete_product(
     product_service: ProductService = Depends(get_product_service)
 ):
     """Delete a product listing"""
-    success = product_service.delete_product(product_id, current_user.id)
+    success = await product_service.delete_product(product_id, current_user.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

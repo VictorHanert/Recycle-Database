@@ -9,8 +9,8 @@ from app.models.user import User
 from app.services.auth_service import AuthService
 from app.services.product_service import ProductService
 from app.services.profile_service import ProfileService
-from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse
-from app.schemas.product import ProductListResponse, ProductFilter, ProductCreate, ProductUpdate, ProductResponse
+from app.schemas.user_schema import UserCreate, UserUpdate, UserResponse, UserListResponse
+from app.schemas.product_schema import ProductListResponse, ProductFilter, ProductCreate, ProductUpdate, ProductResponse
 
 router = APIRouter()
 
@@ -132,7 +132,7 @@ async def create_product_admin(
     product_service: ProductService = Depends(get_product_service)
 ):
     """Create a product as admin. Admin becomes the owner (seller_id set to admin user's id)."""
-    product = product_service.create_product(product_in, _admin_user.id)
+    product = await product_service.create_product(product_in, _admin_user.id)
     return ProductResponse.model_validate(product)
 
 
@@ -155,7 +155,7 @@ async def update_product_admin(
     admin_user: User = Depends(get_admin_user),
     product_service: ProductService = Depends(get_product_service)
 ):
-    updated = product_service.update_product(product_id, product_update, admin_user.id, is_admin=True)
+    updated = await product_service.update_product(product_id, product_update, admin_user.id, is_admin=True)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found or update failed")
     return ProductResponse.model_validate(updated)
@@ -168,7 +168,7 @@ async def delete_product_admin(
     product_service: ProductService = Depends(get_product_service)
 ):
     """Delete a product (admin only) - uses repository delete (hard delete)"""
-    success = product_service.force_delete_product(product_id)
+    success = await product_service.force_delete_product(product_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     return {"message": "Product deleted"}

@@ -2,7 +2,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from app.dependencies import get_location_service
-from app.schemas.location import LocationCreate, LocationResponse, LocationUpdate
+from app.schemas.location_schema import LocationCreate, LocationResponse, LocationUpdate
 from app.services.location_service import LocationService
 
 router = APIRouter()

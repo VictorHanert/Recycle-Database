@@ -36,3 +36,16 @@ class Message(Base):
 
     conversation = relationship("Conversation", back_populates="messages")
     sender = relationship("User", back_populates="messages")
+    read_by = relationship("MessageRead", back_populates="message", cascade="all, delete-orphan")
+
+class MessageRead(Base):
+    __tablename__ = "message_reads"
+
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    read_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    message = relationship("Message", back_populates="read_by")
+    user = relationship("User")
+
+    __table_args__ = (Index("ix_message_read_user", "user_id"),)

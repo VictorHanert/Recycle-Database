@@ -6,28 +6,33 @@ from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, Field
 
 
-# --- Details schemas ---
+# ============================================
+# NESTED INFO SCHEMAS (used in responses)
+# ============================================
+
 class ColorInfo(BaseModel):
-    """Schema for color information"""
+    """Color information nested in product responses"""
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+
 
 class MaterialInfo(BaseModel):
-    """Schema for material information"""
+    """Material information nested in product responses"""
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
 
+
 class TagInfo(BaseModel):
-    """Schema for tag information"""
+    """Tag information nested in product responses"""
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
 
 
 class SellerInfo(BaseModel):
-    """Schema for seller information in products"""
+    """Seller information nested in product responses"""
     model_config = ConfigDict(from_attributes=True)
     
     id: int
@@ -36,7 +41,7 @@ class SellerInfo(BaseModel):
 
 
 class LocationInfo(BaseModel):
-    """Schema for location information in products"""
+    """Location information nested in product responses"""
     model_config = ConfigDict(from_attributes=True)
     
     id: int
@@ -44,15 +49,8 @@ class LocationInfo(BaseModel):
     postcode: str
 
 
-class ProductDetailsResponse(BaseModel):
-    colors: List[ColorInfo]
-    materials: List[MaterialInfo]
-    tags: List[TagInfo]
-    locations: List[LocationInfo] = Field(default_factory=list)
-
-
 class ProductImageInfo(BaseModel):
-    """Schema for product image information"""
+    """Product image information nested in product responses"""
     model_config = ConfigDict(from_attributes=True)
     
     id: int
@@ -60,15 +58,28 @@ class ProductImageInfo(BaseModel):
     sort_order: int
 
 
-class ProductBase(BaseModel):
-    """Base product schema with common fields"""
-    title: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
-    price_amount: Decimal = Field(..., gt=0, decimal_places=2)
+class PriceHistoryInfo(BaseModel):
+    """Price history information nested in product responses"""
+    model_config = ConfigDict(from_attributes=True)
 
+    changed_at: datetime
+    amount: Decimal
+    currency: str
+
+
+class CategoryInfo(BaseModel):
+    """Category information (products/categories endpoint)"""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
+# ============================================
+# REQUEST SCHEMAS (Input)
+# ============================================
 
 class ProductCreate(BaseModel):
-    """Schema for product creation"""
+    """Schema for product creation (products/ POST endpoint)"""
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=1, max_length=1000)
     price_amount: Decimal = Field(..., gt=0, decimal_places=2)
@@ -90,7 +101,7 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    """Schema for product updates"""
+    """Schema for product updates (products/{id} PUT endpoint)"""
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
     price_amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
@@ -115,11 +126,30 @@ class ProductUpdate(BaseModel):
     color_ids: Optional[List[int]] = Field(None)
     material_ids: Optional[List[int]] = Field(None)
     tag_ids: Optional[List[int]] = Field(None)
-    image_urls: Optional[List[str]] = Field(None)
+    
+    # Image management for updates
+    image_urls: Optional[List[str]] = Field(None, description="New image URLs to add")
+    keep_image_ids: Optional[List[int]] = Field(None, description="IDs of existing images")
 
+
+class ProductFilter(BaseModel):
+    """Schema for product filtering (products/ GET query params)"""
+    category: Optional[str] = None
+    min_price: Optional[float] = Field(None, ge=0)
+    max_price: Optional[float] = Field(None, ge=0)
+    location_id: Optional[int] = None
+    condition: Optional[str] = None
+    sort_by: Optional[str] = "newest"
+    status: Optional[str] = None
+    search_term: Optional[str] = Field(None, max_length=100)
+
+
+# ============================================
+# RESPONSE SCHEMAS (Output)
+# ============================================
 
 class ProductResponse(BaseModel):
-    """Schema for product response"""
+    """Standard product response (used in most endpoints)"""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -149,40 +179,14 @@ class ProductResponse(BaseModel):
     location: Optional[LocationInfo] = None
     images: List[ProductImageInfo] = []
     views_count: int = 0
-    favorites_count: int = 0
     colors: List[ColorInfo] = []
     materials: List[MaterialInfo] = []
     tags: List[TagInfo] = []
-    price_changes: List["PriceHistoryInfo"] = []
-
-
-class ProductWithSeller(ProductResponse):
-    """Schema for product with seller information"""
-    seller_username: str
-    seller_email: str
-
-
-# Search and filter schemas
-class CategoryInfo(BaseModel):
-    """Schema for category information"""
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    name: str
-
-class ProductFilter(BaseModel):
-    """Schema for product filtering"""
-    category: Optional[str] = None
-    min_price: Optional[float] = Field(None, ge=0)
-    max_price: Optional[float] = Field(None, ge=0)
-    location_id: Optional[int] = None
-    condition: Optional[str] = None
-    sort_by: Optional[str] = "newest"
-    status: Optional[str] = None
-    search_term: Optional[str] = Field(None, max_length=100)
+    price_changes: List[PriceHistoryInfo] = []
 
 
 class ProductListResponse(BaseModel):
-    """Schema for paginated product list response"""
+    """Paginated product list response (products/ endpoint)"""
     products: list[ProductResponse]
     total: int
     page: int
@@ -190,10 +194,9 @@ class ProductListResponse(BaseModel):
     total_pages: int
 
 
-class PriceHistoryInfo(BaseModel):
-    """Schema for price history information"""
-    model_config = ConfigDict(from_attributes=True)
-
-    changed_at: datetime
-    amount: Decimal
-    currency: str
+class ProductDetailsResponse(BaseModel):
+    """Product creation form options (products/productdetails endpoint)"""
+    colors: List[ColorInfo]
+    materials: List[MaterialInfo]
+    tags: List[TagInfo]
+    locations: List[LocationInfo] = Field(default_factory=list)

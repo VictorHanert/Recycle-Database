@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 
 from app.models.location import Location
-from app.schemas.location import LocationCreate, LocationUpdate
+from app.schemas.location_schema import LocationCreate, LocationUpdate
 from app.repositories.base import LocationRepositoryInterface
 
 

@@ -3,8 +3,8 @@ from typing import Optional, List
 from fastapi import HTTPException, status
 
 from app.models.user import User
-from app.schemas.user import UserUpdate, ProfileUpdate, UserProfileResponse, PublicUserProfile
-from app.schemas.location import LocationCreate
+from app.schemas.user_schema import UserUpdate, ProfileUpdate, UserProfileResponse, PublicUserProfile
+from app.schemas.location_schema import LocationCreate
 from app.repositories.base import UserRepositoryInterface, ProductRepositoryInterface, LocationRepositoryInterface
 
 

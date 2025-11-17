@@ -14,6 +14,7 @@ class Category(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
 
+
     parent = relationship("Category", remote_side=[id], backref="children")
 
     __table_args__ = (Index("ix_categories_parent", "parent_id"),)

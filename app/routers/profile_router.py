@@ -8,9 +8,9 @@ from app.dependencies import (
     get_current_user_optional, 
     get_profile_service
 )
-from app.schemas.user import UserProfileResponse, ProfileUpdate, PublicUserProfile
-from app.schemas.location import LocationCreate
-from app.schemas.product import ProductResponse
+from app.schemas.user_schema import UserProfileResponse, ProfileUpdate, PublicUserProfile
+from app.schemas.location_schema import LocationCreate
+from app.schemas.product_schema import ProductResponse
 from app.services.profile_service import ProfileService
 
 router = APIRouter()

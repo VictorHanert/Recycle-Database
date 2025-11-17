@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy import and_, desc, asc, or_, func
+from sqlalchemy import and_, desc, asc, or_, func, text
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 
@@ -13,10 +13,10 @@ from app.models.category import Category
 from app.models.price_history import ProductPriceHistory
 from app.models.product_details import Color, Material, Tag
 from app.models.product_details import ProductColor, ProductMaterial, ProductTag
-from app.models.media import ProductImage
+from app.models.product_images import ProductImage
 from app.models.item_views import ItemView
 from app.models.favorites import Favorite
-from app.schemas.product import ProductCreate, ProductUpdate, ProductFilter
+from app.schemas.product_schema import ProductCreate, ProductUpdate, ProductFilter
 
 
 # Common loading options for different query types
@@ -74,26 +74,14 @@ class MySQLProductRepository(ProductRepositoryInterface):
         
         products = query.offset(skip).limit(limit).all()
         
-        # Set computed counts
-        for product in products:
-            product.views_count = len(product.views) if hasattr(product, 'views') else 0
-            product.favorites_count = len(product.favorites) if hasattr(product, 'favorites') else 0
-        
         return products
     
     def get_by_seller(self, seller_id: int, skip: int = 0, limit: int = 100) -> List[Product]:
         """Get products by seller ID."""
-        products = self.db.query(Product).options(*PRODUCT_LIST_LOAD_OPTIONS).filter(
+        return self.db.query(Product).options(*PRODUCT_LIST_LOAD_OPTIONS).filter(
             Product.seller_id == seller_id,
             Product.deleted_at.is_(None)
         ).order_by(desc(Product.created_at)).offset(skip).limit(limit).all()
-        
-        # Set computed counts
-        for product in products:
-            product.views_count = len(product.views) if hasattr(product, 'views') else 0
-            product.favorites_count = len(product.favorites) if hasattr(product, 'favorites') else 0
-        
-        return products
     
     def create(self, product_data: ProductCreate, seller_id: int) -> Product:
         """Create a new product."""
@@ -155,13 +143,17 @@ class MySQLProductRepository(ProductRepositoryInterface):
                 detail="Product creation failed due to database constraint"
             ) from e
     
-    def update(self, product_id: int, product_data: ProductUpdate) -> Optional[Product]:
+    def update(self, product_id: int, product_data: ProductUpdate, new_image_urls: Optional[List[str]] = None) -> tuple[Optional[Product], List[str]]:
         """Update product information."""
-        product = self.db.query(Product).filter(Product.id == product_id).first()
+        product = self.db.query(Product).options(selectinload(Product.images)).filter(
+            Product.id == product_id
+        ).first()
+        
         if not product:
-            return None
+            return None, []
         
         update_data = product_data.model_dump(exclude_unset=True)
+        deleted_image_urls = []
         
         # Check if price has changed and create price history entry
         if 'price_amount' in update_data or 'price_currency' in update_data:
@@ -179,21 +171,40 @@ class MySQLProductRepository(ProductRepositoryInterface):
         # Handle many-to-many relationships
         self._handle_product_relationships(product, update_data, is_update=True)
         
-        # Handle images
-        if 'image_urls' in update_data:
-            # Delete existing images
-            self.db.query(ProductImage).filter(ProductImage.product_id == product_id).delete()
+        # Handle image updates
+        keep_image_ids = update_data.pop('keep_image_ids', None)
+        update_data.pop('image_urls', None)  # Remove old field if present
+        
+        if keep_image_ids is not None:
+            # Get current images
+            current_images = self.db.query(ProductImage).filter(
+                ProductImage.product_id == product_id
+            ).all()
             
-            # Add new images
-            if update_data['image_urls']:
-                for i, image_url in enumerate(update_data['image_urls']):
-                    new_image = ProductImage(
-                        product_id=product_id,
-                        url=image_url,
-                        sort_order=i + 1
-                    )
-                    self.db.add(new_image)
-            update_data.pop('image_urls')
+            # Identify images to delete (not in keep list)
+            for img in current_images:
+                if img.id not in keep_image_ids:
+                    deleted_image_urls.append(img.url)
+                    self.db.delete(img)
+        
+        # Add new images
+        if new_image_urls:
+            # Get current max sort_order
+            max_sort_order = 0
+            remaining_images = self.db.query(ProductImage).filter(
+                ProductImage.product_id == product_id
+            ).all()
+            
+            if remaining_images:
+                max_sort_order = max(img.sort_order for img in remaining_images)
+            
+            for i, image_url in enumerate(new_image_urls):
+                new_image = ProductImage(
+                    product_id=product_id,
+                    url=image_url,
+                    sort_order=max_sort_order + i + 1
+                )
+                self.db.add(new_image)
         
         # Handle status changes
         if 'status' in update_data:
@@ -211,7 +222,7 @@ class MySQLProductRepository(ProductRepositoryInterface):
         try:
             self.db.commit()
             self.db.refresh(product)
-            return product
+            return product, deleted_image_urls
         except IntegrityError as e:
             self.db.rollback()
             raise HTTPException(
@@ -219,12 +230,17 @@ class MySQLProductRepository(ProductRepositoryInterface):
                 detail="Update failed due to database constraint"
             ) from e
     
-    def delete(self, product_id: int) -> bool:
-        """Hard delete a product and all related data"""
+    def delete(self, product_id: int) -> Optional[List[str]]:
+        """Hard delete a product and all related data."""
+        product = self.db.query(Product).options(selectinload(Product.images)).filter(
+            Product.id == product_id
+        ).first()
         
-        product = self.db.query(Product).filter(Product.id == product_id).first()
         if not product:
-            return False
+            return None
+        
+        # Collect image URLs for cleanup
+        image_urls = [img.url for img in product.images]
         
         try:
             # Delete many-to-many relationships first
@@ -234,10 +250,10 @@ class MySQLProductRepository(ProductRepositoryInterface):
             self.db.query(Favorite).filter(Favorite.product_id == product_id).delete()
             self.db.delete(product)
             self.db.commit()
-            return True
+            return image_urls
         except Exception:
             self.db.rollback()
-            return False
+            return None
 
     def soft_delete(self, product_id: int) -> bool:
         """Soft delete a product."""
@@ -341,12 +357,7 @@ class MySQLProductRepository(ProductRepositoryInterface):
         
         try:
             self.db.add(new_view)
-            
-            # Increment the views counter on the product
-            product = self.db.query(Product).filter(Product.id == product_id).first()
-            if product:
-                product.views_count += 1
-            
+            # Note: views_count is auto-incremented by database trigger
             self.db.commit()
             return True
         except IntegrityError:
@@ -355,7 +366,7 @@ class MySQLProductRepository(ProductRepositoryInterface):
     
     def get_by_category(self, category: str, skip: int = 0, limit: int = 100) -> List[Product]:
         """Get products by category name."""
-        products = self.db.query(Product).join(Category, Product.category_id == Category.id).filter(
+        return self.db.query(Product).join(Category, Product.category_id == Category.id).filter(
             and_(
                 Category.name.ilike(f"%{category}%"),
                 Product.status == "active",
@@ -364,13 +375,6 @@ class MySQLProductRepository(ProductRepositoryInterface):
         ).options(*PRODUCT_LIST_LOAD_OPTIONS).order_by(
             desc(Product.created_at)
         ).offset(skip).limit(limit).all()
-        
-        # Set computed counts
-        for product in products:
-            product.views_count = len(product.views) if hasattr(product, 'views') else 0
-            product.favorites_count = len(product.favorites) if hasattr(product, 'favorites') else 0
-        
-        return products
     
     def _apply_filters(self, query, filters: ProductFilter):
         """Apply filters to the query."""
@@ -394,12 +398,12 @@ class MySQLProductRepository(ProductRepositoryInterface):
             query = query.filter(Product.status == filters.status)
         
         if filters.search_term:
-            search = f"%{filters.search_term}%"
+            # Use MySQL FULLTEXT search with MATCH AGAINST
+            # ft_product_search index on (title, description)
+            # Supports boolean operators: +required -exclude "exact phrase"
+            search_term = filters.search_term.replace("'", "''")  # Escape single quotes
             query = query.filter(
-                or_(
-                    Product.title.ilike(search),
-                    Product.description.ilike(search)
-                )
+                text(f"MATCH(title, description) AGAINST('{search_term}' IN BOOLEAN MODE)")
             )
         
         return query
@@ -413,6 +417,12 @@ class MySQLProductRepository(ProductRepositoryInterface):
             "price_high": desc(Product.price_amount),
             "title": asc(Product.title)
         }
+        
+        if filters and filters.search_term and filters.sort_by == "relevance":
+            search_term = filters.search_term.replace("'", "''")  # Escape single quotes
+            return query.order_by(
+                text(f"MATCH(title, description) AGAINST('{search_term}' IN NATURAL LANGUAGE MODE) DESC")
+            )
         
         if filters and filters.sort_by:
             return query.order_by(sort_options.get(filters.sort_by, desc(Product.created_at)))

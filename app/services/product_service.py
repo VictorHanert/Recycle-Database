@@ -1,19 +1,26 @@
 """Service class for product operations using the repository pattern."""
 from typing import List, Optional, Tuple
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 
 from app.models.product import Product
-from app.schemas.product import ProductCreate, ProductFilter, ProductUpdate, ProductResponse
+from app.schemas.product_schema import ProductCreate, ProductFilter, ProductUpdate, ProductResponse
 from app.repositories.base import ProductRepositoryInterface, UserRepositoryInterface
+from app.services.file_upload_service import FileUploadService
 
 
 class ProductService:
     """Service class for product operations using the repository pattern."""
     
-    def __init__(self, product_repository: ProductRepositoryInterface, user_repository: UserRepositoryInterface):
+    def __init__(
+        self, 
+        product_repository: ProductRepositoryInterface, 
+        user_repository: UserRepositoryInterface,
+        file_upload_service: Optional[FileUploadService] = None
+    ):
         self.product_repository = product_repository
         self.user_repository = user_repository
+        self.file_upload_service = file_upload_service or FileUploadService()
 
     def get_all_details(self):
         """Fetch all colors, materials, and tags for product details dropdowns/filters."""
@@ -23,31 +30,39 @@ class ProductService:
         """Get all product categories"""
         return self.product_repository.get_all_categories()
 
-    def create_product(self, product: ProductCreate, seller_id: int) -> Product:
-        """Create a new product listing"""
-        return self.product_repository.create(product, seller_id)
+    async def create_product(self, product: ProductCreate, seller_id: int, image_files: Optional[List[UploadFile]] = None) -> Product:
+        """Create a new product listing with optional images."""
+        saved_image_urls = []
+        
+        try:
+            if image_files:
+                saved_image_urls = await self.file_upload_service.validate_and_save_images(image_files)
+            
+            if saved_image_urls:
+                product.image_urls = saved_image_urls
+            
+            return self.product_repository.create(product, seller_id)
+            
+        except Exception as e:
+            if saved_image_urls:
+                await self.file_upload_service.delete_images(saved_image_urls)
+            raise
 
     def get_product_by_id(self, product_id: int, current_user_id: Optional[int] = None) -> Optional[ProductResponse]:
-        """Get product by ID with all details and counters"""
+        """Get product by ID with all details and counters."""
         product = self.product_repository.get_by_id(product_id, load_details=True)
         
         if not product:
             return None
         
-        # Check if user can access this product
-        if current_user_id != product.seller_id:  # Not the owner
-            if product.status not in ['active', 'sold']:
-                return None  # Deny access to paused/draft products
+        if current_user_id != product.seller_id and product.status not in ['active', 'sold']:
+            return None
         
-        # Record view for authenticated users (not the seller)
         if current_user_id and current_user_id != product.seller_id:
             self.product_repository.record_view(product_id, current_user_id)
-            # Re-query to get updated data
             product = self.product_repository.get_by_id(product_id, load_details=True)
         
-        # Use Pydantic schema for response
         product_response = ProductResponse.model_validate(product)
-        # The counts are set in the repository layer already
         return product_response
 
     def get_products(
@@ -84,8 +99,8 @@ class ProductService:
         total = len(all_products)
         return products, total
 
-    def update_product(self, product_id: int, product_update: ProductUpdate, user_id: int, is_admin: bool = False) -> Product:
-        """Update an existing product"""
+    async def update_product(self, product_id: int, product_update: ProductUpdate, user_id: int, is_admin: bool = False, image_files: Optional[List[UploadFile]] = None) -> Product:
+        """Update an existing product with optional new images."""
         product = self.product_repository.get_by_id(product_id)
         
         if not product:
@@ -94,17 +109,36 @@ class ProductService:
                 detail="Product not found"
             )
 
-        # Check if user owns the product (skip for admin)
         if not is_admin and product.seller_id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to update this product"
             )
+        
+        saved_image_urls = []
+        
+        try:
+            if image_files:
+                saved_image_urls = await self.file_upload_service.validate_and_save_images(image_files)
+            
+            updated_product, deleted_image_urls = self.product_repository.update(
+                product_id, 
+                product_update,
+                new_image_urls=saved_image_urls
+            )
+            
+            if deleted_image_urls:
+                await self.file_upload_service.delete_images(deleted_image_urls)
+            
+            return updated_product
+            
+        except Exception as e:
+            if saved_image_urls:
+                await self.file_upload_service.delete_images(saved_image_urls)
+            raise
 
-        return self.product_repository.update(product_id, product_update)
-
-    def delete_product(self, product_id: int, user_id: int) -> bool:
-        """Delete a product (soft delete, only owner can delete)"""
+    async def delete_product(self, product_id: int, user_id: int) -> bool:
+        """Delete a product (soft delete, only owner can delete)."""
         product = self.product_repository.get_by_id(product_id)
         if not product:
             raise HTTPException(
@@ -120,9 +154,21 @@ class ProductService:
         
         return self.product_repository.soft_delete(product_id)
 
-    def force_delete_product(self, product_id: int) -> bool:
-        """Force delete a product (admin only, hard delete)"""
-        return self.product_repository.delete(product_id)
+    async def force_delete_product(self, product_id: int) -> bool:
+        """
+        Force delete a product (admin only, hard delete).
+        Deletes product and all associated images.
+        """
+        deleted_image_urls = self.product_repository.delete(product_id)
+        
+        if deleted_image_urls is None:
+            return False
+        
+        # Clean up image files
+        if deleted_image_urls:
+            await self.file_upload_service.delete_images(deleted_image_urls)
+        
+        return True
 
     def get_platform_statistics(self) -> dict:
         """Get platform statistics"""
@@ -155,7 +201,8 @@ class ProductService:
 
         # Use update method with status change
         update_data = ProductUpdate.model_validate({"status": "sold"})
-        return self.product_repository.update(product_id, update_data)
+        updated_product, _ = self.product_repository.update(product_id, update_data)
+        return updated_product
 
     def get_product_statistics(self) -> dict:
         """Get general product statistics"""
@@ -188,4 +235,5 @@ class ProductService:
         # Toggle between active and paused
         new_status = "paused" if product.status == "active" else "active"
         update_data = ProductUpdate.model_validate({"status": new_status})
-        return self.product_repository.update(product_id, update_data)
+        updated_product, _ = self.product_repository.update(product_id, update_data)
+        return updated_product

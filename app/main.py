@@ -1,18 +1,21 @@
 import logging
 import time
-import subprocess
-from pathlib import Path
 from contextlib import asynccontextmanager
 
+from app.routers import activity_router, admin_router, auth_router, favorites_router, location_router, products_router, profile_router
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import auth, products, admin, profile, location
-from app.db.mysql import SessionLocal
+from app.routers import messages_router
 from app.config import get_settings
+from app.db.mysql import initialize_database
 from app.middleware import (
     create_error_response,
     log_http_exception,
@@ -29,53 +32,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-
-def run_migrations():
-    """Run Alembic migrations to ensure database schema is current."""
-    try:
-        logger.info("Running database migrations...")
-        subprocess.run(["alembic", "upgrade", "head"], check=True, capture_output=True)
-        logger.info("Migrations completed")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Migration failed: {e.stderr.decode()}")
-        raise
-    except FileNotFoundError:
-        logger.warning("Alembic not found, skipping migrations")
-
-
-def init_stored_objects():
-    """Initialize stored procedures, functions, views, triggers, and events."""
-    sql_file = Path(__file__).parent.parent / "scripts" / "mysql" / "init_database.sql"
-    
-    if not sql_file.exists():
-        logger.warning("init_database.sql not found, skipping")
-        return
-    
-    logger.info("Initializing database objects...")
-    db = SessionLocal()
-    
-    try:
-        with open(sql_file, 'r') as f:
-            sql_content = f.read()
-        
-        cursor = db.connection().connection.cursor()
-        
-        for statement in sql_content.split(';'):
-            statement = statement.strip()
-            if statement and not statement.startswith('--'):
-                try:
-                    cursor.execute(statement)
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        logger.debug(f"SQL note: {e}")
-        
-        db.connection().commit()
-        logger.info("Database objects initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize database objects: {e}")
-        raise
-    finally:
-        db.close()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -83,8 +40,7 @@ async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     # Startup
     logger.info("Starting application...")
-    run_migrations()
-    init_stored_objects()
+    initialize_database()
     logger.info("Application ready")
     
     yield
@@ -110,6 +66,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add rate limiting middleware
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Logging middleware
 @app.middleware("http")
@@ -145,11 +106,15 @@ async def custom_general_exception_handler(request, exc):
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(products.router, prefix="/api/products", tags=["Products"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
-app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
-app.include_router(location.router, prefix="/api/locations", tags=["Locations"])
+app.include_router(auth_router.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(products_router.router, prefix="/api/products", tags=["Products"])
+app.include_router(favorites_router.router, prefix="/api/favorites", tags=["Favorites"])
+app.include_router(activity_router.router, prefix="/api/activity", tags=["Activity & History"])
+app.include_router(admin_router.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(profile_router.router, prefix="/api/profile", tags=["Profile"])
+app.include_router(messages_router.router, prefix="/api/messages", tags=["Messages"])
+app.include_router(location_router.router, prefix="/api/locations", tags=["Locations"])
+
 
 @app.get("/")
 async def root():

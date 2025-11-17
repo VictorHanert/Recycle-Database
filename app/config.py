@@ -34,10 +34,15 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "password"
 
+    # Azure Storage Configuration
+    azure_storage_connection_string: str = ""
+    storage_mode: str = "local"  # "local" or "azure"
+
     class Config:
         """Pydantic configuration."""
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields from .env
 
 
 @lru_cache()

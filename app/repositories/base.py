@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.product import Product
 from app.models.location import Location
-from app.schemas.user import UserCreate, UserUpdate
-from app.schemas.product import ProductCreate, ProductUpdate, ProductFilter
+from app.schemas.user_schema import UserCreate, UserUpdate
+from app.schemas.product_schema import ProductCreate, ProductUpdate, ProductFilter
 
 # Type variables for generic repository
 T = TypeVar('T')
@@ -134,7 +134,7 @@ class ProductRepositoryInterface(ABC):
         pass
     
     @abstractmethod
-    def update(self, product_id: int, product_data: ProductUpdate) -> Optional[Product]:
+    def update(self, product_id: int, product_data: ProductUpdate, new_image_urls: Optional[List[str]] = None) -> tuple[Optional[Product], List[str]]:
         """Update product information."""
         pass
     
@@ -144,7 +144,7 @@ class ProductRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    def delete(self, product_id: int) -> bool:
+    def delete(self, product_id: int) -> Optional[List[str]]:
         """Hard delete a product and all related data."""
         pass
 
