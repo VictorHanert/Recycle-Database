@@ -58,3 +58,15 @@ async def favorite_product(product_id: str, current_user: MySQLUser = Depends(ge
         if not ok:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to favorite product")
         return None
+
+
+@router.get("/{product_id}/recommendations", response_model=List[Dict[str, Any]])
+async def recommend_products(product_id: str, limit: int = 10):
+    """Get recommended products based on shared user interactions (favorites/views)."""
+    async with neo4j_session() as session:
+        repo = Neo4jProductRepository(session)
+        # Verify product exists first
+        product = await repo.get_by_id(product_id)
+        if not product:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+        return await repo.recommendations(product_id=product_id, limit=limit)

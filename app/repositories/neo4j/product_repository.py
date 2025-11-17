@@ -59,6 +59,27 @@ class Neo4jProductRepository:
             records.append(rec["p"]._properties)
         return records
 
+    async def recommendations(self, product_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Recommend products based on shared FAVORITED or VIEWED users.
+
+        Strategy: Find users who FAVORITED or VIEWED the target product, then other products
+        those users also FAVORITED or VIEWED. Rank by distinct user overlap.
+        """
+        query = (
+            "MATCH (target:Product {id: $id})<-[:FAVORITED|:VIEWED]-(u:User)-[:FAVORITED|:VIEWED]->(other:Product) "
+            "WHERE other.id <> $id "
+            "WITH other, count(DISTINCT u) AS score "
+            "WHERE score > 0 "
+            "RETURN other, score ORDER BY score DESC, other.created_at DESC LIMIT $limit"
+        )
+        result = await self.session.run(query, id=product_id, limit=limit)
+        recommendations: List[Dict[str, Any]] = []
+        async for rec in result:
+            props = rec["other"]._properties
+            props["recommendation_score"] = rec["score"]
+            recommendations.append(props)
+        return recommendations
+
     async def add_favorite(self, username: str, product_id: str) -> bool:
         query = (
             "MATCH (u:User {username: $username}), (p:Product {id: $product_id}) "

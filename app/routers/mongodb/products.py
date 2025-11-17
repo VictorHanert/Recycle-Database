@@ -1,5 +1,5 @@
 """MongoDB Products API Router."""
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -76,6 +76,61 @@ async def search_products(
 ):
     """Full-text search products in MongoDB."""
     return await repo.search(q, skip=skip, limit=limit)
+
+
+@router.get("/filter", response_model=List[ProductResponse])
+async def filter_products(
+    text: Optional[str] = Query(None, description="Text search in title/description"),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None),
+    status: Optional[str] = Query(None),
+    seller_username: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncIOMotorDatabase = Depends(get_mongodb)
+):
+    """Advanced filtered search combining text, price range, status, seller, and tag."""
+    query: Dict[str, Any] = {}
+    if status:
+        query["status"] = status
+    if min_price is not None or max_price is not None:
+        price_cond: Dict[str, Any] = {}
+        if min_price is not None:
+            price_cond["$gte"] = min_price
+        if max_price is not None:
+            price_cond["$lte"] = max_price
+        query["price_amount"] = price_cond
+    if seller_username:
+        query["seller.username"] = seller_username
+    if tag:
+        query["details.tags"] = tag
+
+    # Text search uses $text; combine carefully
+    if text:
+        query["$text"] = {"$search": text}
+
+    cursor = db.products.find(query).sort("created_at", -1).skip(skip).limit(limit)
+    results = []
+    async for doc in cursor:
+        # Map to ProductResponse manually (subset) - rely on Pydantic population by name
+        doc["_id"] = str(doc.get("_id"))
+        results.append(ProductResponse.model_validate(doc))
+    return results
+
+
+@router.get("/top-categories", response_model=List[Dict[str, Any]])
+async def top_categories(limit: int = 5, db: AsyncIOMotorDatabase = Depends(get_mongodb)):
+    """Aggregation: Top categories by active product count."""
+    pipeline = [
+        {"$match": {"status": "active", "category.name": {"$ne": None}}},
+        {"$group": {"_id": "$category.name", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": limit},
+    ]
+    cursor = db.products.aggregate(pipeline)
+    results = await cursor.to_list(length=limit)
+    return [{"category": doc["_id"], "count": doc["count"]} for doc in results]
 
 
 @router.get("/popular", response_model=List[ProductResponse])
