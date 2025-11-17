@@ -3,6 +3,7 @@ import time
 from contextlib import asynccontextmanager
 
 from app.routers import activity_router, admin_router, auth_router, favorites_router, location_router, products_router, profile_router
+from app.routers.mongodb import users as mongodb_users_router, products as mongodb_products_router
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +17,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.routers import messages_router
 from app.config import get_settings
 from app.db.mysql import initialize_database
+from app.db.mongodb import init_mongodb, close_mongodb
 from app.middleware import (
     create_error_response,
     log_http_exception,
@@ -41,12 +43,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting application...")
     initialize_database()
+    await init_mongodb()
     logger.info("Application ready")
     
     yield
     
     # Shutdown
     logger.info("Shutting down...")
+    await close_mongodb()
 
 app = FastAPI(
     title="Marketplace API",
@@ -69,7 +73,7 @@ app.add_middleware(
 
 # Add rate limiting middleware
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 app.add_middleware(SlowAPIMiddleware)
 
 # Logging middleware
@@ -115,6 +119,10 @@ app.include_router(profile_router.router, prefix="/api/profile", tags=["Profile"
 app.include_router(messages_router.router, prefix="/api/messages", tags=["Messages"])
 app.include_router(location_router.router, prefix="/api/locations", tags=["Locations"])
 
+# MongoDB routers
+app.include_router(mongodb_users_router.router, prefix="/api/mongodb/users", tags=["MongoDB Users"])
+app.include_router(mongodb_products_router.router, prefix="/api/mongodb/products", tags=["MongoDB Products"])
+
 
 @app.get("/")
 async def root():
@@ -132,7 +140,8 @@ async def health_check():
         "environment": settings.environment,
         "message": "Marketplace API is running!",
         "databases": {
-            "mysql_configured": bool(settings.database_url)
+            "mysql_configured": bool(settings.database_url),
+            "mongodb_configured": bool(settings.mongodb_url)
         }
     }
 

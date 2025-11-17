@@ -21,7 +21,7 @@ COPY alembic.ini ./
 COPY ./alembic ./alembic
 
 # Copy scripts for database initialization
-COPY ./scripts ./scripts
+# COPY ./scripts ./scripts
 
 # Create uploads directory for image storage
 RUN mkdir -p /code/uploads/product_images
