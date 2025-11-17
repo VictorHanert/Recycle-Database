@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.routers import activity_router, admin_router, auth_router, favorites_router, location_router, products_router, profile_router
 from app.routers.mongodb import users as mongodb_users_router, products as mongodb_products_router
+from app.routers.neo4j import users as neo4j_users_router, products as neo4j_products_router
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,7 @@ from app.routers import messages_router
 from app.config import get_settings
 from app.db.mysql import initialize_database
 from app.db.mongodb import init_mongodb, close_mongodb
+from app.db.neo4j import init_neo4j, close_neo4j
 from app.middleware import (
     create_error_response,
     log_http_exception,
@@ -44,6 +46,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application...")
     initialize_database()
     await init_mongodb()
+    await init_neo4j()
     logger.info("Application ready")
     
     yield
@@ -51,6 +54,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down...")
     await close_mongodb()
+    await close_neo4j()
 
 app = FastAPI(
     title="Marketplace API",
@@ -123,6 +127,10 @@ app.include_router(location_router.router, prefix="/api/locations", tags=["Locat
 app.include_router(mongodb_users_router.router, prefix="/api/mongodb/users", tags=["MongoDB Users"])
 app.include_router(mongodb_products_router.router, prefix="/api/mongodb/products", tags=["MongoDB Products"])
 
+# Neo4j routers
+app.include_router(neo4j_users_router.router, prefix="/api/neo4j/users", tags=["Neo4j Users"])
+app.include_router(neo4j_products_router.router, prefix="/api/neo4j/products", tags=["Neo4j Products"])
+
 
 @app.get("/")
 async def root():
@@ -141,7 +149,8 @@ async def health_check():
         "message": "Marketplace API is running!",
         "databases": {
             "mysql_configured": bool(settings.database_url),
-            "mongodb_configured": bool(settings.mongodb_url)
+            "mongodb_configured": bool(settings.mongodb_url),
+            "neo4j_configured": bool(settings.neo4j_url)
         }
     }
 
