@@ -1,0 +1,43 @@
+{
+  "id": "recycle-api-env",
+  "name": "Recycle marketplace API",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "bearerToken",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "username",
+      "value": "testuser",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "password",
+      "value": "testpassword123",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "email",
+      "value": "test@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "full_name",
+      "value": "Test User",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

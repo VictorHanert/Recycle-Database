@@ -62,7 +62,10 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan
+    lifespan=lifespan,
+    servers=[
+        {"url": "http://localhost:8000", "description": "Local development server"},
+    ]
 )
 
 # Configure CORS
@@ -113,7 +116,7 @@ async def custom_general_exception_handler(request, exc):
 
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Include routers
+# MySQL routers
 app.include_router(auth_router.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products_router.router, prefix="/api/products", tags=["Products"])
 app.include_router(favorites_router.router, prefix="/api/favorites", tags=["Favorites"])
@@ -124,12 +127,12 @@ app.include_router(messages_router.router, prefix="/api/messages", tags=["Messag
 app.include_router(location_router.router, prefix="/api/locations", tags=["Locations"])
 
 # MongoDB routers
-app.include_router(mongodb_users_router.router, prefix="/api/mongodb/users", tags=["MongoDB Users"])
-app.include_router(mongodb_products_router.router, prefix="/api/mongodb/products", tags=["MongoDB Products"])
+app.include_router(mongodb_users_router.router, prefix="/mongodb/users", tags=["MongoDB Users"])
+app.include_router(mongodb_products_router.router, prefix="/mongodb/products", tags=["MongoDB Products"])
 
 # Neo4j routers
-app.include_router(neo4j_users_router.router, prefix="/api/neo4j/users", tags=["Neo4j Users"])
-app.include_router(neo4j_products_router.router, prefix="/api/neo4j/products", tags=["Neo4j Products"])
+app.include_router(neo4j_users_router.router, prefix="/neo4j/users", tags=["Neo4j Users"])
+app.include_router(neo4j_products_router.router, prefix="/neo4j/products", tags=["Neo4j Products"])
 
 
 @app.get("/")

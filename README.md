@@ -28,9 +28,14 @@ docker compose down
 ```
 
 Backend runs on: `http://localhost:8000`  
-Swagger docs: `http://localhost:8000/docs`
+Swagger docs: `http://localhost:8000/docs` (interactive testing)  
+ReDoc: `http://localhost:8000/redoc` (clean documentation)  
+OpenAPI schema: `http://localhost:8000/openapi.json`
 
-The MySQL database is automatically seeded with test data on first startup.
+### Postman Setup
+
+Import the API into Postman for easy testing:
+See **[postman/POSTMAN_SETUP.md](postman/POSTMAN_SETUP.md)** for detailed setup guide.
 
 ---
 

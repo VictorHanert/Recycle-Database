@@ -7,7 +7,7 @@ from app.models.user import User
 from app.schemas.message_schema import (ConversationStart, MessageCreate, MessageUpdate,ConversationOut, ConversationWithMessagesOut, MessageOut, ParticipantOut)
 from app.services.message_service import MessageService
 
-router = APIRouter(tags=["messages"])
+router = APIRouter()
 
 @router.get("/conversations", response_model=List[ConversationOut])
 def list_conversations(

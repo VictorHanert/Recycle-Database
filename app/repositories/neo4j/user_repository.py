@@ -26,4 +26,7 @@ class Neo4jUserRepository:
         result = await self.session.run(
             "MATCH (u:User) RETURN u SKIP $skip LIMIT $limit", skip=skip, limit=limit
         )
-        return [rec["u"]._properties for rec in await result.to_list()]
+        users = []
+        async for record in result:
+            users.append(record["u"]._properties)
+        return users
