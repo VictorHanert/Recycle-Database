@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Dump MongoDB database running in docker-compose service mongo-db
+# Usage command: ./scripts/dumps/dump_mongodb.sh
 # Output: dumps/mongodb/<timestamp>/
 # Requires mongodump available in the container (official mongo image has it)
 

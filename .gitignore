@@ -49,8 +49,11 @@ backend/*.egg-info/
 backend/.installed.cfg
 backend/*.egg
 
-# Images:
-backend/uploads/
+# Local Images uploads:
+uploads/
+
+# Database dumps:
+dumps/
 
 # Database
 *.db

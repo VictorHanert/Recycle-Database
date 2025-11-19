@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Dump MySQL database running in docker-compose service mysql-database
+# Usage command: ./scripts/dumps/dump_mysql.sh
 # Output: dumps/mysql/<timestamp>/marketplace.sql
 # Includes schema, stored procedures, triggers, views, events, and data
 
