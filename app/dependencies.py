@@ -7,6 +7,8 @@ from app.services.auth_service import AuthService
 from app.services.product_service import ProductService
 from app.services.profile_service import ProfileService
 from app.services.location_service import LocationService
+from app.services.admin_service import AdminService
+from app.services.message_service import MessageService
 from app.db.mysql import get_db
 from app.models.user import User
 from app.repositories.mysql.factory import get_repository_factory, RepositoryFactory
@@ -47,6 +49,16 @@ def get_profile_service(repo_factory: RepositoryFactory = Depends(get_repository
 def get_location_service(repo_factory: RepositoryFactory = Depends(get_repository_factory_dep)) -> LocationService:
     """Get location service instance"""
     return LocationService(repo_factory.get_location_repository())
+
+
+def get_admin_service(db: Session = Depends(get_db)) -> AdminService:
+    """Get admin service instance"""
+    return AdminService(db)
+
+
+def get_message_service(db: Session = Depends(get_db)) -> MessageService:
+    """Get message service instance"""
+    return MessageService(db)
 
 
 # Authentication Dependencies

@@ -4,11 +4,12 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 
-from app.dependencies import get_admin_user, get_auth_service, get_product_service, get_profile_service
+from app.dependencies import get_admin_user, get_auth_service, get_product_service, get_profile_service, get_admin_service
 from app.models.user import User
 from app.services.auth_service import AuthService
 from app.services.product_service import ProductService
 from app.services.profile_service import ProfileService
+from app.services.admin_service import AdminService
 from app.schemas.user_schema import UserCreate, UserUpdate, UserResponse, UserListResponse
 from app.schemas.product_schema import ProductListResponse, ProductFilter, ProductCreate, ProductUpdate, ProductResponse
 
@@ -178,10 +179,10 @@ async def delete_product_admin(
 async def get_platform_stats(
     _admin_user: User = Depends(get_admin_user),
     auth_service: AuthService = Depends(get_auth_service),
-    product_service: ProductService = Depends(get_product_service)
+    admin_service: AdminService = Depends(get_admin_service)
 ):
-    """Get platform statistics (admin only)"""
-    stats = product_service.get_platform_statistics()
+    """Get comprehensive platform statistics (admin only)"""
+    stats = admin_service.get_enhanced_statistics()
     stats["total_users"] = auth_service.user_repository.count_total_users()
     
     return stats
