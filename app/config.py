@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     azure_storage_connection_string: str = ""
     storage_mode: str = "local"  # "local" or "azure"
 
+    # Sentry Configuration
+    sentry_dsn: str = ""
+
     class Config:
         """Pydantic configuration."""
         env_file = ".env"

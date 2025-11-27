@@ -1,5 +1,4 @@
 """Activity router for view history and recent activity endpoints."""
-from typing import List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -112,4 +111,3 @@ async def get_product_recommendations(
     
     return ProductRecommendationsResponse(recommendations=recommendations)
     
-    return {"product_id": product_id, "age_days": age_days}

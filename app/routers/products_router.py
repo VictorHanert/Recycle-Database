@@ -5,7 +5,6 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 
-from app.db.mysql import get_db
 from app.dependencies import (
     get_current_active_user, 
     get_current_user_optional, 

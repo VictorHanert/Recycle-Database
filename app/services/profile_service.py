@@ -172,8 +172,8 @@ class ProfileService:
                     detail=f"Failed to delete product {product.id}"
                 )
         
-        success = self.user_repository.delete(user_id)
-        if not success:
+        deleted = self.user_repository.delete(user_id)
+        if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to delete user"

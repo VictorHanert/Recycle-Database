@@ -67,10 +67,6 @@ logs/
 *.sqlite
 *.sqlite3
 
-# Scripts (not needed in production)
-scripts/
-seed.py
-
 # Alembic versions (migrations applied separately)
 alembic/versions/
 

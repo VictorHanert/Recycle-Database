@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String, Index
-from sqlalchemy.orm import relationship
+from sqlalchemy import Integer, String, Index
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+
 from app.db.mysql import Base
+
 
 class Location(Base):
     __tablename__ = "locations"
 
-    id = Column(Integer, primary_key=True, index=True)
-    city = Column(String(120), nullable=False)
-    postcode = Column(String(32), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    city: Mapped[str] = mapped_column(String(120), nullable=False)
+    postcode: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (
         Index("ix_locations_postcode_city", "postcode", "city"),

@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, exists, and_
 
 from app.models.messages import Conversation, ConversationParticipant, Message, MessageRead
-from app.models.user import User
 
 
 class MySQLMessageRepository:
@@ -52,10 +51,11 @@ class MySQLMessageRepository:
     
     def create_conversation(self, product_id: int) -> Conversation:
         """Create a new conversation for a product."""
+        now = datetime.now(timezone.utc)
         conversation = Conversation(
             product_id=product_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            created_at=now,
+            updated_at=now
         )
         self.db.add(conversation)
         self.db.flush()  # Get the conversation ID
@@ -68,7 +68,7 @@ class MySQLMessageRepository:
         ).first()
         if conversation:
             conversation.updated_at = datetime.now(timezone.utc)
-            self.db.commit()
+            self.db.flush()
     
     # ===== Participant Operations =====
     
@@ -149,6 +149,7 @@ class MySQLMessageRepository:
         )
         self.db.add(message)
         self.db.flush()
+        self.update_conversation_timestamp(conversation_id)
         return message
     
     def update_message(self, message_id: int, new_body: str) -> Optional[Message]:

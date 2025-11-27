@@ -1,10 +1,10 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 import logging
 import subprocess
 import sys
 from pathlib import Path
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from app.config import get_settings
 
@@ -27,8 +27,11 @@ engine = create_engine(
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create declarative base
-Base = declarative_base()
+
+# Create declarative base class
+class Base(DeclarativeBase):
+    pass
+
 
 # Dependency to get database session
 def get_db():
@@ -173,4 +176,3 @@ def initialize_database():
     init_stored_objects()
     seed_database()
     logger.info("Database initialization completed")
-

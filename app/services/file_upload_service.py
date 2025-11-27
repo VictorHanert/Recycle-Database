@@ -5,8 +5,8 @@ from uuid import uuid4
 import os
 
 from fastapi import UploadFile, HTTPException, status
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
-from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
+from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions import ResourceExistsError
 
 from app.config import get_settings
 
@@ -68,7 +68,7 @@ class FileUploadService:
             
             return saved_urls
             
-        except Exception as e:
+        except Exception:
             await self._cleanup_files(saved_urls)
             raise
     

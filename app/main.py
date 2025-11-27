@@ -1,10 +1,8 @@
 import logging
+import sentry_sdk
 import time
 from contextlib import asynccontextmanager
 
-from app.routers import activity_router, admin_router, auth_router, favorites_router, location_router, products_router, profile_router
-from app.routers.mongodb import users as mongodb_users_router, products as mongodb_products_router
-from app.routers.neo4j import users as neo4j_users_router, products as neo4j_products_router
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +13,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import messages_router
+from app.routers import activity_router, admin_router, auth_router, favorites_router, location_router, products_router, profile_router, messages_router
+from app.routers.mongodb import users as mongodb_users_router, products as mongodb_products_router
+from app.routers.neo4j import users as neo4j_users_router, products as neo4j_products_router
 from app.config import get_settings
 from app.db.mysql import initialize_database
 from app.db.mongodb import init_mongodb, close_mongodb
@@ -28,6 +28,15 @@ from app.middleware import (
     format_validation_errors
 )
 
+from typing import Union, Awaitable
+from starlette.responses import Response
+
+HandlerReturn = Union[Response, Awaitable[Response]]
+
+def rate_limit_handler(request: Request, exc: Exception) -> HandlerReturn:
+    assert isinstance(exc, RateLimitExceeded)
+    return _rate_limit_exceeded_handler(request, exc)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -35,6 +44,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+sentry_sdk.init(
+    dsn=settings.sentry_dsn,
+    # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions.
+    profiles_sample_rate=1.0,
+    send_default_pii=True,
+)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -45,8 +63,6 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting application...")
     initialize_database()
-    await init_mongodb()
-    await init_neo4j()
     logger.info("Application ready")
     
     yield
@@ -62,10 +78,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan,
-    servers=[
-        {"url": "http://localhost:8000", "description": "Local development server"},
-    ]
+    lifespan=lifespan
 )
 
 # Configure CORS
@@ -80,7 +93,7 @@ app.add_middleware(
 
 # Add rate limiting middleware
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # Logging middleware
@@ -156,6 +169,11 @@ async def health_check():
             "neo4j_configured": bool(settings.neo4j_url)
         }
     }
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0
+    return {"result": division_by_zero}
 
 if __name__ == "__main__":
     import uvicorn

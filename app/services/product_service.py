@@ -43,7 +43,7 @@ class ProductService:
             
             return self.product_repository.create(product, seller_id)
             
-        except Exception as e:
+        except Exception:
             if saved_image_urls:
                 await self.file_upload_service.delete_images(saved_image_urls)
             raise
@@ -126,13 +126,17 @@ class ProductService:
                 product_update,
                 new_image_urls=saved_image_urls
             )
-            
+            if updated_product is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update product",
+            )
             if deleted_image_urls:
                 await self.file_upload_service.delete_images(deleted_image_urls)
             
             return updated_product
             
-        except Exception as e:
+        except Exception:
             if saved_image_urls:
                 await self.file_upload_service.delete_images(saved_image_urls)
             raise
@@ -202,6 +206,11 @@ class ProductService:
         # Use update method with status change
         update_data = ProductUpdate.model_validate({"status": "sold"})
         updated_product, _ = self.product_repository.update(product_id, update_data)
+        if updated_product is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to mark product as sold",
+        )
         return updated_product
 
     def get_product_statistics(self) -> dict:
@@ -236,4 +245,9 @@ class ProductService:
         new_status = "paused" if product.status == "active" else "active"
         update_data = ProductUpdate.model_validate({"status": new_status})
         updated_product, _ = self.product_repository.update(product_id, update_data)
+        if updated_product is None:
+            raise HTTPException(
+              status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+              detail="Failed to update product status",
+        )
         return updated_product
