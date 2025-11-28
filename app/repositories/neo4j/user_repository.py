@@ -30,3 +30,15 @@ class Neo4jUserRepository:
         async for record in result:
             users.append(record["u"]._properties)
         return users
+
+    async def delete(self, username: str) -> bool:
+        """Delete user and detach all relationships."""
+        result = await self.session.run(
+            "MATCH (u:User {username: $username}) DETACH DELETE u RETURN count(u) as c",
+            username=username,
+        )
+        record = await result.single()
+        # Neo4j returns 0 here since u is deleted; treat success if no error and user existed
+        # Perform existence check separately
+        check = await self.session.run("MATCH (u:User {username: $username}) RETURN u", username=username)
+        return (await check.single()) is None

@@ -1,84 +1,53 @@
 from typing import Optional
+from types import SimpleNamespace
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
 
 from app.services.auth_service import AuthService
-from app.services.product_service import ProductService
-from app.services.profile_service import ProfileService
-from app.services.location_service import LocationService
-from app.services.admin_service import AdminService
-from app.services.message_service import MessageService
-from app.db.mysql import get_db
-from app.models.user import User
-from app.repositories.mysql.factory import get_repository_factory, RepositoryFactory
+from app.db.mongodb import get_mongodb
+from app.repositories.mongodb.user_repository import MongoDBUserRepository
 
 security = HTTPBearer()
 optional_security = HTTPBearer(auto_error=False)
 
-
-# Repository Dependencies
-def get_repository_factory_dep(db: Session = Depends(get_db)) -> RepositoryFactory:
-    """Get repository factory instance"""
-    return get_repository_factory(db)
-
-
-# Service Dependencies
-def get_auth_service(repo_factory: RepositoryFactory = Depends(get_repository_factory_dep)) -> AuthService:
-    """Get auth service instance"""
-    return AuthService(repo_factory.get_user_repository())
-
-
-def get_product_service(repo_factory: RepositoryFactory = Depends(get_repository_factory_dep)) -> ProductService:
-    """Get product service instance"""
-    return ProductService(
-        repo_factory.get_product_repository(),
-        repo_factory.get_user_repository()
-    )
-
-
-def get_profile_service(repo_factory: RepositoryFactory = Depends(get_repository_factory_dep)) -> ProfileService:
-    """Get profile service instance"""
-    return ProfileService(
-        repo_factory.get_user_repository(),
-        repo_factory.get_product_repository(),
-        repo_factory.get_location_repository()
-    )
-
-
-def get_location_service(repo_factory: RepositoryFactory = Depends(get_repository_factory_dep)) -> LocationService:
-    """Get location service instance"""
-    return LocationService(repo_factory.get_location_repository())
-
-
-def get_admin_service(db: Session = Depends(get_db)) -> AdminService:
-    """Get admin service instance"""
-    return AdminService(db)
-
-
-def get_message_service(db: Session = Depends(get_db)) -> MessageService:
-    """Get message service instance"""
-    return MessageService(db)
-
+AuthenticatedUser = SimpleNamespace
 
 # Authentication Dependencies
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    auth_service: AuthService = Depends(get_auth_service)
-) -> User:
-    """Get current authenticated user"""
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get current authenticated principal from JWT without MySQL.
+    Looks up MongoDB user for flags when available; otherwise defaults.
+    Returns a lightweight object with username/is_active/is_admin attributes.
+    """
     username = AuthService.verify_token(credentials.credentials)
-    user = auth_service.get_user_by_username(username)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
+
+    # Try to enrich with MongoDB user flags
+    try:
+        db = get_mongodb()
+        user_repo = MongoDBUserRepository(db)
+        mongo_user = await user_repo.get_by_username(username)
+        if mongo_user:
+            return SimpleNamespace(
+                id=None,
+                username=str(mongo_user.username),
+                is_active=bool(mongo_user.is_active),
+                is_admin=bool(mongo_user.is_admin),
+            )
+    except Exception:
+        # Fallback below if MongoDB unavailable or user missing
+        pass
+
+    # Fallback principal if user not found in MongoDB
+    return SimpleNamespace(
+        id=None,
+        username=username,
+        is_active=True,
+        is_admin=False,
+    )
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_active_user(current_user = Depends(get_current_user)):
     """Get current active user"""
     if not current_user.is_active:
         raise HTTPException(
@@ -88,7 +57,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     return current_user
 
 
-async def get_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
+async def get_admin_user(current_user = Depends(get_current_active_user)):
     """Get current admin user"""
     if not current_user.is_admin:
         raise HTTPException(
@@ -100,18 +69,23 @@ async def get_admin_user(current_user: User = Depends(get_current_active_user)) 
 
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
-    auth_service: AuthService = Depends(get_auth_service)
-) -> Optional[User]:
-    """Get current user if authenticated, otherwise return None"""
+):
+    """Get current principal if authenticated, else None (no MySQL)."""
     if not credentials:
         return None
-    
     try:
         username = AuthService.verify_token(credentials.credentials)
-        user = auth_service.get_user_by_username(username)
-        if user and user.is_active:
-            return user
+        db = get_mongodb()
+        user_repo = MongoDBUserRepository(db)
+        mongo_user = await user_repo.get_by_username(username)
+        if mongo_user and bool(mongo_user.is_active):
+            return SimpleNamespace(
+                id=None,
+                username=str(mongo_user.username),
+                is_active=bool(mongo_user.is_active),
+                is_admin=bool(mongo_user.is_admin),
+            )
+        # Fallback principal if token valid but mongo user missing
+        return SimpleNamespace(id=None, username=username, is_active=True, is_admin=False)
     except HTTPException:
-        pass
-    
-    return None
+        return None

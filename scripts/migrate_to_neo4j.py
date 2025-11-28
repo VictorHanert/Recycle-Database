@@ -3,14 +3,15 @@ import sys
 from pathlib import Path
 from typing import Any
 from datetime import timezone
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-# Ensure project root on sys.path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.db.mysql import SessionLocal
 from app.db.neo4j import get_neo4j_driver, init_neo4j
+from app.config import get_settings
 from neo4j import AsyncDriver
 from app.models.user import User
 from app.models.product import Product
@@ -19,6 +20,10 @@ from app.models.category import Category
 from app.models.location import Location
 from app.models.item_views import ItemView
 from app.models.messages import Message, Conversation, ConversationParticipant
+
+settings = get_settings()
+engine = create_engine(settings.database_url)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 async def migrate_users(session_mysql) -> int:

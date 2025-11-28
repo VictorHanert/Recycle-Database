@@ -7,8 +7,7 @@ from app.db.mongodb import get_mongodb
 from app.repositories.mongodb.product_repository import MongoDBProductRepository
 from app.repositories.mongodb.user_repository import MongoDBUserRepository
 from app.models.mongodb.product import ProductCreate, ProductUpdate, ProductResponse
-from app.dependencies import get_current_user
-from app.models.user import User as MySQLUser
+from app.dependencies import get_current_user, get_current_user_optional, AuthenticatedUser
 
 
 router = APIRouter()
@@ -22,7 +21,7 @@ def get_product_repository(db: AsyncIOMotorDatabase = Depends(get_mongodb)) -> M
 @router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 async def create_product(
     product_data: ProductCreate,
-    current_user: MySQLUser = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     repo: MongoDBProductRepository = Depends(get_product_repository),
     db: AsyncIOMotorDatabase = Depends(get_mongodb)
 ):
@@ -165,7 +164,7 @@ async def get_product(
 async def update_product(
     product_id: str,
     update_data: ProductUpdate,
-    current_user: MySQLUser = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     repo: MongoDBProductRepository = Depends(get_product_repository),
     db: AsyncIOMotorDatabase = Depends(get_mongodb)
 ):
@@ -202,7 +201,7 @@ async def update_product(
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product(
     product_id: str,
-    current_user: MySQLUser = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     repo: MongoDBProductRepository = Depends(get_product_repository),
     db: AsyncIOMotorDatabase = Depends(get_mongodb)
 ):
@@ -233,3 +232,124 @@ async def delete_product(
         )
     
     await repo.delete(product_id)
+
+
+@router.patch("/{product_id}/mark-sold", response_model=Dict[str, str])
+async def mark_product_as_sold(
+    product_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: MongoDBProductRepository = Depends(get_product_repository),
+    db: AsyncIOMotorDatabase = Depends(get_mongodb)
+):
+    """
+    Mark product as sold in MongoDB.
+    Business Logic: Only product owner can mark as sold.
+    MongoDB Difference: Direct status update using $set operator.
+    """
+    # Find MongoDB user by username
+    user_repo = MongoDBUserRepository(db)
+    mongo_user = await user_repo.get_by_username(str(current_user.username))
+    
+    if not mongo_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found in MongoDB"
+        )
+    
+    # Check if product exists
+    product = await repo.get_by_id(product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Authorization check: owner only (inline, no service layer)
+    if product.seller.id != str(mongo_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only product owner can mark as sold"
+        )
+    
+    # Update status
+    success = await repo.mark_as_sold(product_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update product status"
+        )
+    
+    return {"message": "Product marked as sold", "product_id": product_id}
+
+
+@router.patch("/{product_id}/toggle-status", response_model=Dict[str, str])
+async def toggle_product_status(
+    product_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    repo: MongoDBProductRepository = Depends(get_product_repository),
+    db: AsyncIOMotorDatabase = Depends(get_mongodb)
+):
+    """
+    Toggle product status between active and paused in MongoDB.
+    Business Logic: Only owner can toggle status.
+    MongoDB Difference: Document update with status toggle logic.
+    """
+    # Find MongoDB user by username
+    user_repo = MongoDBUserRepository(db)
+    mongo_user = await user_repo.get_by_username(str(current_user.username))
+    
+    if not mongo_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found in MongoDB"
+        )
+    
+    # Check if product exists
+    product = await repo.get_by_id(product_id)
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+    
+    # Authorization check: owner only
+    if product.seller.id != str(mongo_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only product owner can toggle status"
+        )
+    
+    # Toggle status
+    new_status = await repo.toggle_status(product_id)
+    if not new_status:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to toggle product status"
+        )
+    
+    return {"message": f"Product status changed to {new_status}", "new_status": new_status}
+
+
+@router.post("/{product_id}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def track_product_view(
+    product_id: str,
+    current_user: Optional[AuthenticatedUser] = Depends(get_current_user),
+    repo: MongoDBProductRepository = Depends(get_product_repository),
+    db: AsyncIOMotorDatabase = Depends(get_mongodb)
+):
+    """
+    Track product view in MongoDB.
+    MongoDB Difference: Increments view counter AND stores recent view in embedded array.
+    Uses $inc for counter and $push with $slice to keep last 10 views.
+    """
+    viewer_id = None
+    
+    # If user is logged in, track their ID
+    if current_user:
+        user_repo = MongoDBUserRepository(db)
+        mongo_user = await user_repo.get_by_username(str(current_user.username))
+        if mongo_user:
+            viewer_id = str(mongo_user.id)
+    
+    # Track view (increments counter + stores in recent_views array)
+    await repo.track_view(product_id, viewer_id)

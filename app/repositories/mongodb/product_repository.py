@@ -223,3 +223,68 @@ class MongoDBProductRepository:
             product["_id"] = str(product["_id"])
             products.append(ProductResponse(**product))
         return products
+    
+    async def update_status(self, product_id: str, new_status: str) -> bool:
+        """Update product status (active, paused, sold)."""
+        if not ObjectId.is_valid(product_id):
+            return False
+        
+        result = await self.collection.update_one(
+            {"_id": ObjectId(product_id)},
+            {
+                "$set": {
+                    "status": new_status,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            }
+        )
+        return result.modified_count > 0
+    
+    async def mark_as_sold(self, product_id: str) -> bool:
+        """Mark product as sold."""
+        return await self.update_status(product_id, "sold")
+    
+    async def toggle_status(self, product_id: str) -> Optional[str]:
+        """Toggle product between active and paused. Returns new status."""
+        if not ObjectId.is_valid(product_id):
+            return None
+        
+        product = await self.collection.find_one({"_id": ObjectId(product_id)})
+        if not product:
+            return None
+        
+        current_status = product.get("status", "active")
+        new_status = "paused" if current_status == "active" else "active"
+        
+        await self.update_status(product_id, new_status)
+        return new_status
+    
+    async def track_view(self, product_id: str, viewer_user_id: Optional[str] = None) -> bool:
+        """
+        Track product view - increments counter and optionally stores viewer info.
+        For MongoDB, we embed recent views in the product document.
+        """
+        if not ObjectId.is_valid(product_id):
+            return False
+        
+        view_entry = {
+            "viewer_user_id": viewer_user_id,
+            "viewed_at": datetime.now(timezone.utc)
+        }
+        
+        # Increment view count and add to recent_views array (keep last 10)
+        result = await self.collection.update_one(
+            {"_id": ObjectId(product_id)},
+            {
+                "$inc": {"stats.view_count": 1},
+                "$push": {
+                    "recent_views": {
+                        "$each": [view_entry],
+                        "$position": 0,
+                        "$slice": 10  # Keep only last 10 views
+                    }
+                },
+                "$set": {"updated_at": datetime.now(timezone.utc)}
+            }
+        )
+        return result.modified_count > 0

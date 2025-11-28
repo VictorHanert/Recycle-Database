@@ -4,14 +4,17 @@ from pathlib import Path
 from typing import Any, Dict
 
 from datetime import timezone
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # Ensure project root on sys.path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.db.mysql import SessionLocal
+# Import after adding to sys.path
 from app.db.mongodb import get_mongodb, init_mongodb
+from app.config import get_settings
 from app.models.user import User
 from app.models.product import Product
 from app.models.category import Category
@@ -20,6 +23,11 @@ from app.models.favorites import Favorite
 from app.models.messages import Message, Conversation, ConversationParticipant, MessageRead
 from app.models.item_views import ItemView
 from app.models.price_history import ProductPriceHistory
+
+# Create a fresh engine with current DATABASE_URL from settings
+settings = get_settings()
+engine = create_engine(settings.database_url)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 async def migrate_users(db_session) -> int:

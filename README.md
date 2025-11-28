@@ -1,174 +1,204 @@
 # Marketplace Backend – Database Course Final Project
 
-FastAPI backend implementing a marketplace system across three database types: MySQL (relational), MongoDB (document), and Neo4j (graph).
+**Exam Project: Document & Graph Database Implementation**
+
+This repository demonstrates implementing the same marketplace functionality using **MongoDB (document)** and **Neo4j (graph)** databases, migrating data from a production MySQL system. The project showcases database-specific design patterns: denormalization for documents and relationship-driven modeling for graphs.
+
+**Companion Repository**: [recycle-marketplace](https://github.com/VictorHanert/Recycle-Fullstack-Project) (Production MySQL fullstack with Azure deployment)
+
+---
+
+## Project Goals
+
+- **Data Migration**: Transform relational MySQL data into document and graph structures
+- **Equivalent Functionality**: Implement full CRUD operations across both database paradigms
+- **Architecture Comparison**: Demonstrate how database design influences application structure
+- **Exam Requirement**: "Store the same data and query the same information – design and structure will be different"
 
 ---
 
 ## Tech Stack
 
-- **Python** / FastAPI / SQLAlchemy / Pydantic
-- **MySQL** – stored procedures, triggers, views, events, audit logging
-- **MongoDB** – embedded documents, text search, aggregations
-- **Neo4j** – graph relationships, recommendations
-- **Docker Compose** for orchestration
+- **Python 3.13** / FastAPI / Pydantic
+- **MongoDB** – embedded documents, text search, aggregations (Motor async driver)
+- **Neo4j** – graph relationships, recommendations (async driver with Cypher)
+- **Docker Compose** for local orchestration
 
 ---
 
 ## Quick Start
 
 ```bash
-# Start all services (MySQL, MongoDB, Neo4j, backend)
+# Start MongoDB and Neo4j databases
 docker compose up -d
 
-# View logs
+# View backend logs
 docker compose logs -f python-backend
 
-# Stop
+# Stop all services
 docker compose down
 ```
 
-Backend runs on: `http://localhost:8000`  
-Swagger docs: `http://localhost:8000/docs` (interactive testing)  
-ReDoc: `http://localhost:8000/redoc` (clean documentation)  
-OpenAPI schema: `http://localhost:8000/openapi.json`
-
-### Postman Setup
-
-Import the API into Postman for easy testing:
-See **[postman/POSTMAN_SETUP.md](postman/POSTMAN_SETUP.md)** for detailed setup guide.
+**Access Points:**
+- Backend API: `http://localhost:8001`
+- Swagger docs: `http://localhost:8001/docs`
+- ReDoc: `http://localhost:8001/redoc`
 
 ---
 
-## Database Users & Security
+## Data Migration from MySQL
 
-Each database has 4 user types:
-- **app_user**: Application connection (minimum privileges)
-- **db_admin**: Full database administration
-- **readonly_user**: Read-only access for analytics
-- **restricted_user**: Limited access to non-sensitive data
-
----
-
-## Migrate Data to MongoDB & Neo4j
-
-After MySQL is populated, migrate data to the other databases:
+This repository reads from the production MySQL database (separate repo) and transforms data for MongoDB and Neo4j:
 
 ```bash
+# Migrate to MongoDB (denormalized documents with embedded data)
 docker compose exec python-backend poetry run python -m scripts.migrate_to_mongodb
+
+# Migrate to Neo4j (graph nodes and relationships)
 docker compose exec python-backend poetry run python -m scripts.migrate_to_neo4j
 ```
 
-Migrations are **idempotent** – safe to run multiple times.
+Migrations are **idempotent** and safe to rerun.
 
 ---
 
-## Database Dumps (for submission)
+## API Endpoints
 
-```bash
-# MySQL dump (includes schema, procedures, triggers, views, events, data)
-bash scripts/dumps/dump_mysql.sh
+Both databases implement the same core functionality with database-specific optimizations:
 
-# MongoDB dump
-bash scripts/dumps/dump_mongodb.sh
+### MongoDB Endpoints (`/mongodb/products`)
+- `POST /` - Create product (embedded seller/category)
+- `GET /` - List products with filters
+- `GET /{id}` - Get product by ID
+- `PUT /{id}` - Update product
+- `DELETE /{id}` - Delete product
+- `PATCH /{id}/mark-sold` - Mark as sold
+- `PATCH /{id}/toggle-status` - Toggle active/paused
+- `POST /{id}/view` - Track view (embedded in document)
+- `GET /filter` - Advanced search (text, price, tags)
+- `GET /top-categories` - Aggregation pipeline
+- `GET /popular` - Sort by view_count
 
-# Neo4j dump
-bash scripts/dumps/dump_neo4j.sh
+### Neo4j Endpoints (`/neo4j/products`)
+- `POST /` - Create product + CREATED relationship
+- `GET /` - List products
+- `GET /{id}` - Get product by ID
+- `PUT /{id}` - Update product node
+- `DELETE /{id}` - Delete product + relationships
+- `PATCH /{id}/mark-sold` - Update status property
+- `PATCH /{id}/toggle-status` - Toggle status
+- `POST /{id}/view` - Create VIEWED relationship
+- `POST /{id}/favorite` - Create FAVORITED relationship
+- `GET /{id}/recommendations` - Graph traversal (collaborative filtering)
+- `GET /popular` - Sort by view_count property
+
+---
+
+## Database Design Patterns
+
+### MongoDB (Document Store)
+- **Denormalization**: Seller, category, location embedded in product documents
+- **No joins**: All related data retrieved in single query
+- **Embedded arrays**: price_history, recent_views stored in product document
+- **Text search**: Full-text index on title/description
+- **Aggregation pipelines**: Group, sort, limit for analytics
+- **Validation**: Pydantic models enforce schema at application layer
+
+**Example Document:**
+```json
+{
+  "_id": ObjectId("..."),
+  "title": "Mountain Bike",
+  "seller": {
+    "id": "123",
+    "username": "john_doe",
+    "full_name": "John Doe"
+  },
+  "category": {
+    "id": "5",
+    "name": "Mountain Bikes"
+  },
+  "price_history": [
+    {"amount": 5000, "currency": "DKK", "changed_at": "2024-01-01T..."}
+  ],
+  "stats": {
+    "view_count": 42,
+    "favorite_count": 3
+  }
+}
 ```
 
-Dumps are saved to `scripts/dumps/` with timestamps.
+### Neo4j (Graph Store)
+- **Relationships over embedding**: CREATED, FAVORITED, VIEWED, IN_CATEGORY
+- **No models needed**: Cypher queries return dynamic node properties
+- **Graph traversal**: Recommendations via shared user interactions
+- **Authorization via relationships**: Check CREATED edge for ownership
+- **Counters as properties**: view_count, favorite_count on Product node
 
----
+**Example Graph:**
+```cypher
+(:User {username: "john_doe"})-[:CREATED]->
+(:Product {id: "uuid", title: "Mountain Bike", status: "active"})-[:IN_CATEGORY]->
+(:Category {name: "Mountain Bikes"})
 
-## API Endpoints (Parallel Namespaces)
-
-Same functionality across all three databases:
-
-```
-MySQL:
-  /api/products, /api/auth/login, /api/auth/register
-
-MongoDB:
-  /api/mongodb/products
-  /api/mongodb/products/filter          (advanced search)
-  /api/mongodb/products/top-categories  (aggregation)
-
-Neo4j:
-  /api/neo4j/products
-  /api/neo4j/products/{id}/recommendations  (graph traversal)
+(:User {username: "jane"})-[:FAVORITED]->(:Product)
+(:User {username: "bob"})-[:VIEWED]->(:Product)
 ```
 
 ---
 
-## MySQL Features
+## Architecture Differences
 
-- **10+ entities**: users, products, categories, locations, favorites, messages, etc.
-- **Stored procedures**: `ArchiveSoldProduct`, `GetProductRecommendations`, etc.
-- **Triggers**: audit log on product insert/update/delete; auto-update view/like counters
-- **Views**: `vw_public_products`, `vw_popular_products`
-- **Events**: scheduled task to pause old inactive products
-- **User privileges**: app user, admin, read-only, restricted read (see `scripts/mysql/create_users.sql`)
-
----
-
-## MongoDB Features
-
-- **Embedded documents**: seller, category, location inside product docs (denormalized)
-- **Text index**: full-text search on title/description
-- **Aggregation**: top categories by product count
-- **Filtered search**: combine text, price range, status, seller, tags
-
----
-
-## Neo4j Features
-
-- **Nodes**: User, Product
-- **Relationships**: `(:User)-[:CREATED]->(:Product)`, `[:FAVORITED]`, `[:VIEWED]`
-- **Recommendations**: "users who favorited this also favorited..."
-
----
-
-## Tests
-
-```bash
-docker compose exec python-backend poetry run pytest
-```
+| Aspect | MongoDB | Neo4j |
+|--------|---------|-------|
+| **Schema** | Flexible documents (Pydantic validation) | Schema-less nodes/relationships |
+| **Related Data** | Embedded (denormalized) | Relationships (normalized) |
+| **Authorization** | Check embedded seller.id | Traverse CREATED relationship |
+| **Queries** | Aggregation pipelines | Cypher pattern matching |
+| **Service Layer** | ❌ None (inline router logic) | ❌ None (Cypher handles complexity) |
+| **Models** | ✅ Pydantic for validation | ❌ Direct dict from Cypher |
+| **Best For** | Read-heavy, document-centric | Relationship-heavy, recommendations |
 
 ---
 
 ## Project Structure
-### Repo 1: Fullstack Production App
 
-recycle-marketplace/  (deployed to Azure)
-├── frontend/          # React app on Vercel
-├── backend/
-│   ├── services/      # Full business logic
-│   ├── repositories/mysql/
-│   └── routers/mysql/
-└── MySQL Database     # "Source of Truth"
+```
+app/
+  routers/
+    mongodb/           # Document DB endpoints (no service layer)
+    neo4j/             # Graph DB endpoints (no service layer)
+  repositories/
+    mongodb/           # Motor/PyMongo data access
+    neo4j/             # Neo4j async driver with Cypher
+  models/
+    mongodb/           # Pydantic models for validation
+    mysql/             # SQLAlchemy models (reference only)
+scripts/
+  migrate_to_mongodb.py  # Transform MySQL → MongoDB
+  migrate_to_neo4j.py    # Transform MySQL → Neo4j
+  mongodb/
+    create_users.js        # MongoDB users & roles
+  neo4j/
+    create_users.cypher    # Neo4j users (Enterprise)
+  dumps/
+    dump_mongodb.sh
+    dump_neo4j.sh
+docker-compose.yml      # MongoDB + Neo4j + Backend
+```
+
+**Key Differences from MySQL Repository:**
+- ❌ No service layer (business logic inline in routers)
+- ❌ No file upload service (images stored as URLs only)
+- ✅ Direct repository → router pattern (simpler for document/graph operations)
+- ✅ Authorization checks inline (ownership via embedded data or relationships)
+
 ---
-### Repo 2: Databases for Mongo & Neo4j
-recycle/
-├── backend/
-│   ├── routers/
-│   │   ├── mongodb/   Document DB endpoints
-│   │   └── neo4j/     Graph DB endpoints
-│   ├── repositories/
-│   │   ├── mongodb/   Direct DB access
-│   │   └── neo4j/     Direct DB access
-│   ├── models/
-│       ├── mongodb/   # Pydantic schemas
-│       └── (no neo4j models)
-├── scripts/
-│   ├── migrate_to_mongodb.py   # Read from Repo 1's MySQL
-│   └── migrate_to_neo4j.py     # Read from Repo 1's MySQL
-└── docker-compose.yml  # MongoDB + Neo4j only
+## Architecture
 
----
-### Architecture
+### Local Docker Architecture
 
-Local Docker Architecture Diagram
-
-  ```
+```
                                 CLIENT / SWAGGER UI
                                (Browser / Postman / Test)
                                           │
@@ -178,7 +208,7 @@ Local Docker Architecture Diagram
 |                         FASTAPI BACKEND (Local Docker)                          |
 |                                                                                  |
 |   +──────────────────────+                    +─────────────────────+            |
-|   | Router: /api/mongodb |                    |  Router: /api/neo4j |            |
+|   | Router: /mongodb     |                    |  Router: /neo4j     |            |
 |   +───────────┬──────────+                    +──────────┬──────────+            |
 |               │                                          │                       |
 |   +-----------▼──────────+                    +──────────▼──────────+            |
@@ -200,9 +230,71 @@ Local Docker Architecture Diagram
                 └──────────────────┬───────────────────────┘
                                    │
                       MIGRATION SCRIPTS (Python)
-                      Read from Repo 1's Azure MySQL
+                      Read from Production MySQL Database
                       Transform & Write to Local Databases
-``` 
+```
+
+### Two-Repository Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  REPO 1: PRODUCTION FULLSTACK (recycle-marketplace)         │
+│  ┌──────────────┐        ┌──────────────┐                  │
+│  │   Frontend   │───────►│  Backend API │                  │
+│  │   (Vercel)   │        │  (Azure App) │                  │
+│  └──────────────┘        └───────┬──────┘                  │
+│                                   │                          │
+│                          ┌────────▼──────────┐              │
+│                          │  MySQL (Azure)    │              │
+│                          │  "Source of Truth"│              │
+│                          └────────┬──────────┘              │
+└──────────────────────────────────┼───────────────────────────┘
+                                    │
+                      Migration Scripts READ from here
+                                    │
+┌───────────────────────────────────▼───────────────────────────┐
+│  REPO 2: EXAM PROJECT (this repository)                       │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  Backend API (Local Docker)                          │    │
+│  │  ┌────────────────┐  ┌──────────────────┐           │    │
+│  │  │ MongoDB Router │  │  Neo4j Router    │           │    │
+│  │  └───────┬────────┘  └────────┬─────────┘           │    │
+│  │          │                    │                      │    │
+│  │  ┌───────▼────────┐  ┌────────▼─────────┐           │    │
+│  │  │ MongoDB Repo   │  │  Neo4j Repo      │           │    │
+│  │  └───────┬────────┘  └────────┬─────────┘           │    │
+│  └──────────┼────────────────────┼──────────────────────┘    │
+│             │                    │                            │
+│  ┌──────────▼──────────┐  ┌──────▼──────────────┐           │
+│  │ MongoDB (Local/Cloud)│  │ Neo4j (Local/Cloud) │           │
+│  │ (Docker or Atlas)   │  │ (Docker or AuraDB)  │           │
+│  └─────────────────────┘  └─────────────────────┘           │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Design Rationale:**
+- **Repo 1** = Production-grade MySQL fullstack (service layer, file uploads, Azure deployment)
+- **Repo 2** = Exam-focused database comparison (no service layer, simpler architecture)
+- **MySQL** remains authoritative source; MongoDB/Neo4j demonstrate alternative designs
+- Keeps production code clean while showcasing database-specific patterns
+
+---
+
+## Database Users & Security
+
+Both databases support 4 user types (see `scripts/mongodb/create_users.js` and `scripts/neo4j/create_users.cypher`):
+- **app_user**: Application connection (minimum privileges)
+- **db_admin**: Full database administration
+- **readonly_user**: Read-only access for analytics
+- **restricted_user**: Limited access to non-sensitive collections/nodes
+
+---
+
+## Tests
+
+```bash
+docker compose exec python-backend poetry run pytest
+```
 
 
 

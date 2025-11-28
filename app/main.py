@@ -13,9 +13,10 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import activity_router, admin_router, auth_router, favorites_router, location_router, products_router, profile_router, messages_router
 from app.routers.mongodb import users as mongodb_users_router, products as mongodb_products_router
+from app.routers.mongodb import auth as mongodb_auth_router
 from app.routers.neo4j import users as neo4j_users_router, products as neo4j_products_router
+from app.routers.neo4j import auth as neo4j_auth_router
 from app.config import get_settings
 from app.db.mysql import initialize_database
 from app.db.mongodb import init_mongodb, close_mongodb
@@ -62,7 +63,21 @@ async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     # Startup
     logger.info("Starting application...")
-    initialize_database()
+    # Initialize MySQL if available; skip gracefully if not running
+    try:
+        initialize_database()
+    except Exception as exc:
+        logger.warning(f"Skipping MySQL initialization: {exc}")
+
+    # Ensure MongoDB and Neo4j indexes/constraints are created
+    try:
+        await init_mongodb()
+    except Exception as exc:
+        logger.warning(f"MongoDB init warning: {exc}")
+    try:
+        await init_neo4j()
+    except Exception as exc:
+        logger.warning(f"Neo4j init warning: {exc}")
     logger.info("Application ready")
     
     yield
@@ -127,23 +142,17 @@ async def custom_general_exception_handler(request, exc):
     log_general_exception(exc, str(request.url.path))
     return create_error_response(500, "Internal server error", str(request.url.path))
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Static uploads disabled in this repo (no file uploads)
 
-# MySQL routers
-app.include_router(auth_router.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(products_router.router, prefix="/api/products", tags=["Products"])
-app.include_router(favorites_router.router, prefix="/api/favorites", tags=["Favorites"])
-app.include_router(activity_router.router, prefix="/api/activity", tags=["Activity & History"])
-app.include_router(admin_router.router, prefix="/api/admin", tags=["Admin"])
-app.include_router(profile_router.router, prefix="/api/profile", tags=["Profile"])
-app.include_router(messages_router.router, prefix="/api/messages", tags=["Messages"])
-app.include_router(location_router.router, prefix="/api/locations", tags=["Locations"])
+# Note: MySQL routers removed in this repo to focus on MongoDB/Neo4j
 
 # MongoDB routers
+app.include_router(mongodb_auth_router.router, prefix="/mongodb/auth", tags=["MongoDB Auth"])
 app.include_router(mongodb_users_router.router, prefix="/mongodb/users", tags=["MongoDB Users"])
 app.include_router(mongodb_products_router.router, prefix="/mongodb/products", tags=["MongoDB Products"])
 
 # Neo4j routers
+app.include_router(neo4j_auth_router.router, prefix="/neo4j/auth", tags=["Neo4j Auth"])
 app.include_router(neo4j_users_router.router, prefix="/neo4j/users", tags=["Neo4j Users"])
 app.include_router(neo4j_products_router.router, prefix="/neo4j/products", tags=["Neo4j Products"])
 

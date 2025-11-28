@@ -103,3 +103,123 @@ class Neo4jProductRepository:
         result = await self.session.run(query, username=username, product_id=product_id, now=now)
         rec = await result.single()
         return rec is not None
+    
+    async def update(
+        self, 
+        product_id: str, 
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        price_amount: Optional[float] = None,
+        status: Optional[str] = None,
+        condition: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Update product properties in Neo4j."""
+        # Build SET clause dynamically
+        set_parts = []
+        params = {"id": product_id, "updated_at": datetime.now(timezone.utc).isoformat()}
+        
+        if title is not None:
+            set_parts.append("p.title = $title")
+            params["title"] = title
+        if description is not None:
+            set_parts.append("p.description = $description")
+            params["description"] = description
+        if price_amount is not None:
+            set_parts.append("p.price_amount = $price_amount")
+            params["price_amount"] = price_amount
+        if status is not None:
+            set_parts.append("p.status = $status")
+            params["status"] = status
+        if condition is not None:
+            set_parts.append("p.condition = $condition")
+            params["condition"] = condition
+        
+        if not set_parts:
+            return await self.get_by_id(product_id)
+        
+        set_parts.append("p.updated_at = $updated_at")
+        set_clause = ", ".join(set_parts)
+        
+        query = f"MATCH (p:Product {{id: $id}}) SET {set_clause} RETURN p"
+        result = await self.session.run(query, **params)
+        record = await result.single()
+        return record["p"]._properties if record else None
+    
+    async def delete(self, product_id: str) -> bool:
+        """Delete product node and all its relationships."""
+        query = (
+            "MATCH (p:Product {id: $id}) "
+            "DETACH DELETE p "
+            "RETURN count(p) as deleted"
+        )
+        result = await self.session.run(query, id=product_id)
+        record = await result.single()
+        return record and record["deleted"] > 0
+    
+    async def mark_as_sold(self, product_id: str) -> bool:
+        """Mark product as sold by updating status property."""
+        query = (
+            "MATCH (p:Product {id: $id}) "
+            "SET p.status = 'sold', p.updated_at = $updated_at "
+            "RETURN p"
+        )
+        result = await self.session.run(
+            query, 
+            id=product_id, 
+            updated_at=datetime.now(timezone.utc).isoformat()
+        )
+        record = await result.single()
+        return record is not None
+    
+    async def toggle_status(self, product_id: str) -> Optional[str]:
+        """Toggle product status between active and paused. Returns new status."""
+        # Get current status
+        product = await self.get_by_id(product_id)
+        if not product:
+            return None
+        
+        current_status = product.get("status", "active")
+        new_status = "paused" if current_status == "active" else "active"
+        
+        query = (
+            "MATCH (p:Product {id: $id}) "
+            "SET p.status = $status, p.updated_at = $updated_at "
+            "RETURN p"
+        )
+        result = await self.session.run(
+            query,
+            id=product_id,
+            status=new_status,
+            updated_at=datetime.now(timezone.utc).isoformat()
+        )
+        record = await result.single()
+        return new_status if record else None
+    
+    async def track_view(self, product_id: str, viewer_username: Optional[str] = None) -> bool:
+        """
+        Track product view by incrementing counter and optionally creating VIEWED relationship.
+        If viewer is anonymous, just increment counter.
+        """
+        if viewer_username:
+            # Create VIEWED relationship and increment counter
+            return await self.add_view(viewer_username, product_id)
+        else:
+            # Just increment counter for anonymous views
+            query = (
+                "MATCH (p:Product {id: $id}) "
+                "SET p.view_count = coalesce(p.view_count, 0) + 1 "
+                "RETURN p"
+            )
+            result = await self.session.run(query, id=product_id)
+            record = await result.single()
+            return record is not None
+    
+    async def get_seller_username(self, product_id: str) -> Optional[str]:
+        """Get the username of the product seller via CREATED relationship."""
+        query = (
+            "MATCH (u:User)-[:CREATED]->(p:Product {id: $id}) "
+            "RETURN u.username as username"
+        )
+        result = await self.session.run(query, id=product_id)
+        record = await result.single()
+        return record["username"] if record else None

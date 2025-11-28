@@ -6,8 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.db.mongodb import get_mongodb
 from app.repositories.mongodb.user_repository import MongoDBUserRepository
 from app.models.mongodb.user import UserCreate, UserResponse
-from app.dependencies import get_current_user
-from app.models.user import User as MySQLUser
+from app.dependencies import get_current_user, AuthenticatedUser
 
 
 router = APIRouter()
@@ -85,7 +84,7 @@ async def get_user_by_username(
 async def delete_user(
     user_id: str,
     repo: MongoDBUserRepository = Depends(get_user_repository),
-    current_user: MySQLUser = Depends(get_current_user)
+    current_user: AuthenticatedUser = Depends(get_current_user)
 ):
     """Delete user from MongoDB (admin only)."""
     if not bool(current_user.is_admin):
