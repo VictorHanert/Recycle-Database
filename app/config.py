@@ -6,9 +6,6 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings from environment variables"""
 
-    # Database
-    database_url: str = "mysql+pymysql://root:root@localhost:3307/marketplace"
-
     # JWT
     secret_key: str = "your-secret-key-here-change-in-production"
     algorithm: str = "HS256"
@@ -37,9 +34,6 @@ class Settings(BaseSettings):
     # Azure Storage Configuration
     azure_storage_connection_string: str = ""
     storage_mode: str = "local"  # "local" or "azure"
-
-    # Sentry Configuration
-    sentry_dsn: str = ""
 
     class Config:
         """Pydantic configuration."""

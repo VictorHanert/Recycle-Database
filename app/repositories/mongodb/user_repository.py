@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
 from app.models.mongodb.user import UserMongo, UserCreate, UserResponse
-from app.services.auth_service import AuthService
+from app.auth import AuthService
 
 
 class MongoDBUserRepository:

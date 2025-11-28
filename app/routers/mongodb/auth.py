@@ -11,9 +11,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.db.mongodb import get_mongodb
 from app.repositories.mongodb.user_repository import MongoDBUserRepository
 from app.models.mongodb.user import UserCreate as MongoUserCreate, UserMongo, UserResponse as MongoUserResponse
-from app.schemas.mongodb.token import TokenMongo
+from app.models.mongodb.token import TokenMongo
 from pydantic import BaseModel
-from app.services.auth_service import AuthService
+from app.auth import AuthService
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)

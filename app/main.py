@@ -1,24 +1,27 @@
 import logging
-import sentry_sdk
 import time
 from contextlib import asynccontextmanager
+from typing import Union, Awaitable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers.mongodb import users as mongodb_users_router, products as mongodb_products_router
+from app.routers.mongodb import users as mongodb_users_router
+from app.routers.mongodb import products as mongodb_products_router
 from app.routers.mongodb import auth as mongodb_auth_router
-from app.routers.neo4j import users as neo4j_users_router, products as neo4j_products_router
+
+from app.routers.neo4j import users as neo4j_users_router
+from app.routers.neo4j import products as neo4j_products_router
 from app.routers.neo4j import auth as neo4j_auth_router
+
 from app.config import get_settings
-from app.db.mysql import initialize_database
 from app.db.mongodb import init_mongodb, close_mongodb
 from app.db.neo4j import init_neo4j, close_neo4j
 from app.middleware import (
@@ -29,8 +32,6 @@ from app.middleware import (
     format_validation_errors
 )
 
-from typing import Union, Awaitable
-from starlette.responses import Response
 
 HandlerReturn = Union[Response, Awaitable[Response]]
 
@@ -46,28 +47,13 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-sentry_sdk.init(
-    dsn=settings.sentry_dsn,
-    # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring.
-    traces_sample_rate=1.0,
-    # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions.
-    profiles_sample_rate=1.0,
-    send_default_pii=True,
-)
-
 limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
-    # Startup
     logger.info("Starting application...")
-    # Initialize MySQL if available; skip gracefully if not running
-    try:
-        initialize_database()
-    except Exception as exc:
-        logger.warning(f"Skipping MySQL initialization: {exc}")
 
     # Ensure MongoDB and Neo4j indexes/constraints are created
     try:
@@ -142,9 +128,6 @@ async def custom_general_exception_handler(request, exc):
     log_general_exception(exc, str(request.url.path))
     return create_error_response(500, "Internal server error", str(request.url.path))
 
-# Static uploads disabled in this repo (no file uploads)
-
-# Note: MySQL routers removed in this repo to focus on MongoDB/Neo4j
 
 # MongoDB routers
 app.include_router(mongodb_auth_router.router, prefix="/mongodb/auth", tags=["MongoDB Auth"])
@@ -173,16 +156,10 @@ async def health_check():
         "environment": settings.environment,
         "message": "Marketplace API is running!",
         "databases": {
-            "mysql_configured": bool(settings.database_url),
             "mongodb_configured": bool(settings.mongodb_url),
             "neo4j_configured": bool(settings.neo4j_url)
         }
     }
-
-@app.get("/sentry-debug")
-async def trigger_error():
-    division_by_zero = 1 / 0
-    return {"result": division_by_zero}
 
 if __name__ == "__main__":
     import uvicorn

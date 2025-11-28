@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr
 
 from app.db.neo4j import neo4j_session
 from app.repositories.neo4j.user_repository import Neo4jUserRepository
-from app.services.auth_service import AuthService
+from app.auth import AuthService
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)

@@ -19,15 +19,8 @@ RUN poetry config virtualenvs.create false \
 # Copy application code
 COPY ./app ./app
 
-# Copy Alembic configuration and migrations
-COPY alembic.ini ./
-COPY ./alembic ./alembic
-
-# Copy scripts for database initialization
+# Copy scripts for database migrations (MongoDB/Neo4j)
 COPY ./scripts ./scripts
-
-# Create uploads directory for image storage
-RUN mkdir -p /code/uploads/product_images
 
 # Expose port
 EXPOSE 8000

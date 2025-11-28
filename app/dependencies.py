@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.services.auth_service import AuthService
+from app.auth import AuthService
 from app.db.mongodb import get_mongodb
 from app.repositories.mongodb.user_repository import MongoDBUserRepository
 
@@ -16,13 +16,12 @@ AuthenticatedUser = SimpleNamespace
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Get current authenticated principal from JWT without MySQL.
+    """Get current authenticated principal from JWT.
     Looks up MongoDB user for flags when available; otherwise defaults.
     Returns a lightweight object with username/is_active/is_admin attributes.
     """
     username = AuthService.verify_token(credentials.credentials)
 
-    # Try to enrich with MongoDB user flags
     try:
         db = get_mongodb()
         user_repo = MongoDBUserRepository(db)
