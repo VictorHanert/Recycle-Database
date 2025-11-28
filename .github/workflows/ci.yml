@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/cd.yml'
   pull_request:
+    paths-ignore:
+      - '.github/workflows/cd.yml'
 
 jobs:
   lint-and-test-backend:
