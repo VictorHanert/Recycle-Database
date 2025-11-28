@@ -40,6 +40,19 @@ class ProductStatsEmbedded(BaseModel):
     favorite_count: int = 0
 
 
+class PriceHistoryEntry(BaseModel):
+    """Price history entry."""
+    amount: float
+    currency: str = "DKK"
+    changed_at: Optional[datetime] = None
+
+
+class RecentViewEntry(BaseModel):
+    """Recent view entry."""
+    viewer_user_id: Optional[str] = None
+    viewed_at: Optional[datetime] = None
+
+
 class ProductMongo(BaseModel):
     """MongoDB Product model with embedded data."""
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
@@ -67,6 +80,10 @@ class ProductMongo(BaseModel):
     
     # Stats
     stats: ProductStatsEmbedded = Field(default_factory=ProductStatsEmbedded)
+    
+    # Enhanced fields from migration
+    price_history: List[PriceHistoryEntry] = []
+    recent_views: List[RecentViewEntry] = []
     
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -39,6 +39,16 @@ See **[postman/POSTMAN_SETUP.md](postman/POSTMAN_SETUP.md)** for detailed setup 
 
 ---
 
+## Database Users & Security
+
+Each database has 4 user types:
+- **app_user**: Application connection (minimum privileges)
+- **db_admin**: Full database administration
+- **readonly_user**: Read-only access for analytics
+- **restricted_user**: Limited access to non-sensitive data
+
+---
+
 ## Migrate Data to MongoDB & Neo4j
 
 After MySQL is populated, migrate data to the other databases:
@@ -126,22 +136,110 @@ docker compose exec python-backend poetry run pytest
 ---
 
 ## Project Structure
+### Repo 1: Fullstack Production App
 
-```
-app/
-  db/              # MySQL, MongoDB, Neo4j connections
-  models/          # SQLAlchemy + Pydantic models
-  repositories/    # Data access layer (MySQL, MongoDB, Neo4j)
-  routers/         # API endpoints
-  services/        # Business logic
-scripts/
-  mysql/           # init_database.sql, create_users.sql
-  migrate_to_mongodb.py
-  migrate_to_neo4j.py
-  dumps/           # dump scripts
-tests/             # Integration tests
-docker-compose.yml
-```
+recycle-marketplace/  (deployed to Azure)
+├── frontend/          # React app on Vercel
+├── backend/
+│   ├── services/      # Full business logic
+│   ├── repositories/mysql/
+│   └── routers/mysql/
+└── MySQL Database     # "Source of Truth"
+---
+### Repo 2: Databases for Mongo & Neo4j
+recycle/
+├── backend/
+│   ├── routers/
+│   │   ├── mongodb/   Document DB endpoints
+│   │   └── neo4j/     Graph DB endpoints
+│   ├── repositories/
+│   │   ├── mongodb/   Direct DB access
+│   │   └── neo4j/     Direct DB access
+│   ├── models/
+│       ├── mongodb/   # Pydantic schemas
+│       └── (no neo4j models)
+├── scripts/
+│   ├── migrate_to_mongodb.py   # Read from Repo 1's MySQL
+│   └── migrate_to_neo4j.py     # Read from Repo 1's MySQL
+└── docker-compose.yml  # MongoDB + Neo4j only
 
 ---
+### Architecture
 
+Local Docker Architecture Diagram
+
+  ```
+                                CLIENT / SWAGGER UI
+                               (Browser / Postman / Test)
+                                          │
+                                          │ HTTP Requests
+                                          ▼
++──────────────────────────────────────────────────────────────────────────────────+
+|                         FASTAPI BACKEND (Local Docker)                          |
+|                                                                                  |
+|   +──────────────────────+                    +─────────────────────+            |
+|   | Router: /api/mongodb |                    |  Router: /api/neo4j |            |
+|   +───────────┬──────────+                    +──────────┬──────────+            |
+|               │                                          │                       |
+|   +-----------▼──────────+                    +──────────▼──────────+            |
+|   |  MongoDB Repository  |                    |   Neo4j Repository  |            |
+|   |    (Motor/Pydantic)  |                    | (Neo4j Driver/Cypher)|           |
+|   +───────────┬──────────+                    +──────────┬──────────+            |
+|               │                                          │                       |
++───────────────┼──────────────────────────────────────────┼──────────────────────+
+                │                                          │
+                │ JSON Docs                                │ Cypher Nodes
+                │                                          │
+    +-----------▼──────────+                    +──────────▼────────────+
+    |  MongoDB (Container) |                    |  Neo4j (Container)    |
+    |   "Document Store"   |                    |    "Graph Store"      |
+    | (Collections, Embeds)|                    | (Nodes, Relations)    |
+    +──────────────────────+                    +───────────────────────+
+                │                                          │
+                │                                          │
+                └──────────────────┬───────────────────────┘
+                                   │
+                      MIGRATION SCRIPTS (Python)
+                      Read from Repo 1's Azure MySQL
+                      Transform & Write to Local Databases
+``` 
+
+
+
+
+
+---
+Cloud Architecture Diagram
+┌─────────────────────────────────────────────────────────────┐
+│  REPO 1: PRODUCTION FULLSTACK (recycle-marketplace)         │
+│  ┌──────────────┐        ┌──────────────┐                   │
+│  │   Frontend   │───────►│  Backend API │                   │
+│  │   (Vercel)   │        │  (Azure App) │                   │
+│  └──────────────┘        └───────┬──────┘                   │
+│                                   │                         │
+│                          ┌────────▼──────────┐              │
+│                          │  MySQL (Azure)    │              │
+│                          │  "Source of Truth"│              │
+│                          └────────┬──────────┘              │
+└──────────────────────────────────┼──────────────────────────┘
+                                    │
+                      Migration Scripts READ from here
+                                    │
+┌───────────────────────────────────▼───────────────────────────┐
+│  REPO 2: EXAM PROJECT (recycle-exam)                          │
+│  ┌──────────────────────────────────────────────────────┐     │
+│  │  Backend API (Local Docker)                          │     │
+│  │  ┌────────────────┐  ┌──────────────────┐           │      │
+│  │  │ MongoDB Router │  │  Neo4j Router    │           │      │
+│  │  └───────┬────────┘  └────────┬─────────┘           │      │
+│  │          │                    │                     │      │
+│  │  ┌───────▼────────┐  ┌────────▼─────────┐           │      │
+│  │  │ MongoDB Repo   │  │  Neo4j Repo      │           │      │
+│  │  └───────┬────────┘  └────────┬─────────┘           │      │
+│  └──────────┼────────────────────┼─────────────────────┘      │
+│             │                    │                            │
+│  ┌──────────▼──────────┐  ┌──────▼──────────────┐             │
+│  │ MongoDB Atlas       │  │ Neo4j AuraDB        │             │
+│  │ (Cloud Cluster)     │  │ (Cloud Graph)       │             │
+│  └─────────────────────┘  └─────────────────────┘             │
+└───────────────────────────────────────────────────────────────┘

@@ -17,6 +17,9 @@ from app.models.product import Product
 from app.models.category import Category
 from app.models.location import Location
 from app.models.favorites import Favorite
+from app.models.messages import Message, Conversation, ConversationParticipant, MessageRead
+from app.models.item_views import ItemView
+from app.models.price_history import ProductPriceHistory
 
 
 async def migrate_users(db_session) -> int:
@@ -89,6 +92,27 @@ async def migrate_products(db_session) -> int:
             loc = locations[p.location_id]
             loc_emb = {"city": loc.city, "postcode": loc.postcode, "country": "Denmark"}
 
+        # Get price history for this product
+        price_history = db_session.query(ProductPriceHistory).filter(ProductPriceHistory.product_id == p.id).order_by(ProductPriceHistory.changed_at).all()
+        price_history_emb = [
+            {
+                "amount": float(ph.amount),
+                "currency": ph.currency or "DKK",
+                "changed_at": ph.changed_at.astimezone(timezone.utc) if ph.changed_at else None
+            }
+            for ph in price_history
+        ]
+
+        # Get recent views for this product (last 10)
+        recent_views = db_session.query(ItemView).filter(ItemView.product_id == p.id).order_by(ItemView.viewed_at.desc()).limit(10).all()
+        views_emb = [
+            {
+                "viewer_user_id": str(v.viewer_user_id) if v.viewer_user_id else None,
+                "viewed_at": v.viewed_at.astimezone(timezone.utc) if v.viewed_at else None
+            }
+            for v in recent_views
+        ]
+
         stats = {
             "view_count": int(p.views_count or 0),
             "favorite_count": int(p.likes_count or 0),
@@ -108,6 +132,8 @@ async def migrate_products(db_session) -> int:
             "details": {"colors": [], "materials": [], "tags": []},
             "images": [],
             "stats": stats,
+            "price_history": price_history_emb,
+            "recent_views": views_emb,
             "created_at": p.created_at.astimezone(timezone.utc) if p.created_at else None,
             "updated_at": p.updated_at.astimezone(timezone.utc) if p.updated_at else None,
         }
@@ -131,6 +157,98 @@ async def migrate_products(db_session) -> int:
     return count
 
 
+async def migrate_conversations(db_session) -> int:
+    """Migrate conversations with embedded messages - demonstrates nested documents."""
+    mongo = get_mongodb()
+    count = 0
+
+    conversations = db_session.query(Conversation).all()
+
+    for conv in conversations:
+        # Get participants through the relationship table
+        participants_data = db_session.query(ConversationParticipant).filter(
+            ConversationParticipant.conversation_id == conv.id
+        ).all()
+        
+        if len(participants_data) < 2:
+            continue  # Skip incomplete conversations
+        
+        participants_list = []
+        for part in participants_data:
+            user = db_session.get(User, part.user_id)
+            if user:
+                participants_list.append({
+                    "user_id": str(user.id),
+                    "username": user.username
+                })
+
+        # Get all messages for this conversation
+        messages = db_session.query(Message).filter(Message.conversation_id == conv.id).order_by(Message.created_at).all()
+        
+        messages_emb = []
+        for msg in messages:
+            sender = db_session.get(User, msg.sender_id)
+            if sender:
+                # Check if message was read
+                read_records = db_session.query(MessageRead).filter(MessageRead.message_id == msg.id).all()
+                is_read = len(read_records) > 0
+                
+                messages_emb.append({
+                    "sender_id": str(msg.sender_id),
+                    "sender_username": sender.username,
+                    "body": msg.body,
+                    "is_read": is_read,
+                    "created_at": msg.created_at.astimezone(timezone.utc) if msg.created_at else None,
+                })
+
+        doc = {
+            "legacy_mysql_id": int(conv.id),
+            "participants": participants_list,
+            "product_id": str(conv.product_id) if conv.product_id else None,
+            "messages": messages_emb,
+            "message_count": len(messages_emb),
+            "last_message_at": messages_emb[-1]["created_at"] if messages_emb else None,
+            "created_at": conv.created_at.astimezone(timezone.utc) if conv.created_at else None,
+        }
+
+        await mongo.conversations.update_one(
+            {"legacy_mysql_id": int(conv.id)},
+            {"$set": doc},
+            upsert=True
+        )
+        count += 1
+
+    return count
+
+
+async def migrate_favorites(db_session) -> int:
+    """Migrate user favorites - demonstrates array of references."""
+    mongo = get_mongodb()
+    
+    # Group favorites by user
+    favorites = db_session.query(Favorite).all()
+    user_favorites = {}
+    
+    for fav in favorites:
+        if fav.user_id not in user_favorites:
+            user_favorites[fav.user_id] = []
+        user_favorites[fav.user_id].append({
+            "product_id": str(fav.product_id),
+            "created_at": fav.created_at.astimezone(timezone.utc) if fav.created_at else None
+        })
+    
+    # Update each user's favorites array
+    for user_id, favs in user_favorites.items():
+        user = db_session.get(User, user_id)
+        if user:
+            await mongo.users.update_one(
+                {"username": user.username},
+                {"$set": {"favorites": favs, "favorite_count": len(favs)}}
+            )
+    
+    return len(user_favorites)
+
+
 async def migrate_to_mongodb():
     # Ensure indexes
     await init_mongodb()
@@ -139,7 +257,14 @@ async def migrate_to_mongodb():
     try:
         users_count = await migrate_users(session)
         products_count = await migrate_products(session)
-        print(f"MongoDB migration complete: {users_count} users, {products_count} products")
+        conversations_count = await migrate_conversations(session)
+        favorites_count = await migrate_favorites(session)
+        
+        print(f"MongoDB migration complete:")
+        print(f"  - {users_count} users")
+        print(f"  - {products_count} products (with price history and views)")
+        print(f"  - {conversations_count} conversations (with embedded messages)")
+        print(f"  - {favorites_count} users with favorites")
     finally:
         session.close()
 

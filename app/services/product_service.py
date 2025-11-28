@@ -92,9 +92,6 @@ class ProductService:
     def get_products_by_category(self, category: str, skip: int = 0, limit: int = 20) -> Tuple[List[Product], int]:
         """Get products by category with pagination"""
         products = self.product_repository.get_by_category(category, skip, limit)
-        # For category filtering, we need to count separately since repository doesn't have this method
-        # We'll use get_by_category for both count and data for simplicity
-        # In a real implementation, you might add a count_by_category method to the repository
         all_products = self.product_repository.get_by_category(category, skip=0, limit=10000)
         total = len(all_products)
         return products, total

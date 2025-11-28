@@ -47,6 +47,7 @@ services:
   mongo-db:
     image: mongo:7.0
     restart: always
+    command: mongod --auth
     ports:
       - "27017:27017"
     volumes:
