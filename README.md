@@ -6,14 +6,9 @@ This repository demonstrates implementing the same marketplace functionality usi
 
 **Companion Repository**: [recycle-marketplace](https://github.com/VictorHanert/Recycle-Fullstack-Project) (Production MySQL fullstack with Azure deployment)
 
----
-
-## Project Goals
-
 - **Data Migration**: Transform relational MySQL data into document and graph structures
-- **Equivalent Functionality**: Implement full CRUD operations across both database paradigms
+- **Equivalent Functionality**: CRUD operations across both database paradigms
 - **Architecture Comparison**: Demonstrate how database design influences application structure
-- **Exam Requirement**: "Store the same data and query the same information – design and structure will be different"
 
 ---
 
@@ -31,9 +26,6 @@ This repository demonstrates implementing the same marketplace functionality usi
 ```bash
 # Start MongoDB and Neo4j databases
 docker compose up -d
-
-# View backend logs
-docker compose logs -f python-backend
 
 # Stop all services
 docker compose down
@@ -58,7 +50,15 @@ docker compose exec python-backend poetry run python -m scripts.migrate_to_mongo
 docker compose exec python-backend poetry run python -m scripts.migrate_to_neo4j
 ```
 
-Migrations are **idempotent** and safe to rerun.
+---
+
+## Database Users & Security
+
+Both databases support 4 user types (see `scripts/mongodb/create_users.js` and `scripts/neo4j/create_users.cypher`):
+- **app_user**: Application connection (minimum privileges)
+- **db_admin**: Full database administration
+- **readonly_user**: Read-only access for analytics
+- **restricted_user**: Limited access to non-sensitive collections/nodes
 
 ---
 
@@ -196,6 +196,11 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 ---
 ## Architecture
 
+- **Repo 1** = Production-grade MySQL fullstack (service layer, file uploads, Azure deployment)
+- **Repo 2** = Exam-focused database comparison (no service layer, simpler architecture)
+- **MySQL** remains authoritative source; MongoDB/Neo4j demonstrate alternative designs
+- Keeps full-stack code clean while showcasing database-specific patterns
+
 ### Local Docker Architecture
 
 ```
@@ -234,104 +239,113 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
                       Transform & Write to Local Databases
 ```
 
-### Two-Repository Architecture
+### Two-Repository Architecture (Local Development)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  REPO 1: PRODUCTION FULLSTACK (recycle-marketplace)         │
-│  ┌──────────────┐        ┌──────────────┐                  │
-│  │   Frontend   │───────►│  Backend API │                  │
-│  │   (Vercel)   │        │  (Azure App) │                  │
-│  └──────────────┘        └───────┬──────┘                  │
-│                                   │                          │
-│                          ┌────────▼──────────┐              │
-│                          │  MySQL (Azure)    │              │
-│                          │  "Source of Truth"│              │
-│                          └────────┬──────────┘              │
-└──────────────────────────────────┼───────────────────────────┘
-                                    │
-                      Migration Scripts READ from here
-                                    │
-┌───────────────────────────────────▼───────────────────────────┐
-│  REPO 2: EXAM PROJECT (this repository)                       │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  Backend API (Local Docker)                          │    │
-│  │  ┌────────────────┐  ┌──────────────────┐           │    │
-│  │  │ MongoDB Router │  │  Neo4j Router    │           │    │
-│  │  └───────┬────────┘  └────────┬─────────┘           │    │
-│  │          │                    │                      │    │
-│  │  ┌───────▼────────┐  ┌────────▼─────────┐           │    │
-│  │  │ MongoDB Repo   │  │  Neo4j Repo      │           │    │
-│  │  └───────┬────────┘  └────────┬─────────┘           │    │
-│  └──────────┼────────────────────┼──────────────────────┘    │
-│             │                    │                            │
-│  ┌──────────▼──────────┐  ┌──────▼──────────────┐           │
-│  │ MongoDB (Local/Cloud)│  │ Neo4j (Local/Cloud) │           │
-│  │ (Docker or Atlas)   │  │ (Docker or AuraDB)  │           │
-│  └─────────────────────┘  └─────────────────────┘           │
-└────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ REPO 1: PRODUCTION FULLSTACK (recycle-marketplace)                   │
+│                                                                      │
+│  ┌────────────────────┐                                              │
+│  │  Frontend (React)  │  ← Can connect to EITHER backend             │
+│  │  localhost:5173    │                                              │
+│  └─────────┬──────────┘                                              │
+│            │                                                         │
+│            │ HTTP to localhost:8000 (MySQL backend)                  │
+│            │    OR                                                   │
+│            │ HTTP to localhost:8001 (MongoDB/Neo4j backend)          │
+│            │                                                         │
+│  ┌─────────▼─────────────────────────────────────────────┐           │
+│  │  Backend API (FastAPI) - localhost:8000               │           │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐     │           │
+│  │  │ Products │  │  Users   │  │  Categories/...  │     │           │
+│  │  │ Router   │  │  Router  │  │  Routers         │     │           │
+│  │  └─────┬────┘  └────┬─────┘  └────────┬─────────┘     │           │
+│  │        └────────────┼─────────────────┘               │           │
+│  │                     │                                 │           │
+│  │            ┌────────▼─────────┐                       │           │
+│  │            │  Service Layer   │                       │           │
+│  │            └────────┬─────────┘                       │           │
+│  │                     │                                 │           │
+│  │            ┌────────▼─────────┐                       │           │
+│  │            │ MySQL Repository │                       │           │
+│  │            └────────┬─────────┘                       │           │
+│  └─────────────────────┼─────────────────────────────────┘           │
+│                        │                                             │
+│              ┌─────────▼──────────┐                                  │
+│              │  MySQL (Docker)    │  ← Source of Truth               │
+│              │  localhost:3307    │                                  │
+│              └─────────┬──────────┘                                  │
+└────────────────────────┼─────────────────────────────────────────────┘
+                         │
+                         │ Migration Scripts READ from MySQL
+                         │
+┌────────────────────────▼─────────────────────────────────────────────┐
+│ REPO 2: EXAM PROJECT (this repository)                               │
+│                                                                       │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Backend API (FastAPI) - localhost:8001                     │    │
+│  │                                                              │    │
+│  │  ┌─────────────────────┐      ┌─────────────────────┐      │    │
+│  │  │  /mongodb/products  │      │  /neo4j/products    │      │    │
+│  │  │  /mongodb/users     │      │  /neo4j/users       │      │    │
+│  │  │  /mongodb/auth      │      │  /neo4j/auth        │      │    │
+│  │  └──────────┬──────────┘      └──────────┬──────────┘      │    │
+│  │             │                            │                  │    │
+│  │  ┌──────────▼──────────┐      ┌──────────▼──────────┐      │    │
+│  │  │  MongoDB Repository │      │  Neo4j Repository   │      │    │
+│  │  │  (Motor/Pydantic)   │      │  (Cypher Queries)   │      │    │
+│  │  └──────────┬──────────┘      └──────────┬──────────┘      │    │
+│  └─────────────┼──────────────────────────────┼───────────────┘    │
+│                │                              │                      │
+│   ┌────────────▼─────────────┐   ┌───────────▼────────────┐        │
+│   │  MongoDB (Docker)        │   │  Neo4j (Docker)        │        │
+│   │  localhost:27017         │   │  localhost:7687        │        │
+│   │  - Document Store        │   │  - Graph Store         │        │
+│   │  - Embedded Documents    │   │  - Nodes & Relations   │        │
+│   │  - Text Search           │   │  - Recommendations     │        │
+│   └──────────────────────────┘   └────────────────────────┘        │
+│                                                                      │
+│  docker-compose.yml orchestrates all containers:                    │
+│    - python-backend (FastAPI app)                                   │
+│    - mongo-db (MongoDB 8.0)                                         │
+│    - neo4j-db (Neo4j 5.x)                                           │
+└──────────────────────────────────────────────────────────────────────┘
 ```
-
-**Design Rationale:**
-- **Repo 1** = Production-grade MySQL fullstack (service layer, file uploads, Azure deployment)
-- **Repo 2** = Exam-focused database comparison (no service layer, simpler architecture)
-- **MySQL** remains authoritative source; MongoDB/Neo4j demonstrate alternative designs
-- Keeps production code clean while showcasing database-specific patterns
 
 ---
 
-## Database Users & Security
+### Cloud Deployment Architecture
 
-Both databases support 4 user types (see `scripts/mongodb/create_users.js` and `scripts/neo4j/create_users.cypher`):
-- **app_user**: Application connection (minimum privileges)
-- **db_admin**: Full database administration
-- **readonly_user**: Read-only access for analytics
-- **restricted_user**: Limited access to non-sensitive collections/nodes
-
----
-
-## Tests
-
-```bash
-docker compose exec python-backend poetry run pytest
 ```
+┌──────────────────────────────────────────────────────────────┐
+│ PRODUCTION (recycle-marketplace)                             │
+│                                                               │
+│  ┌─────────────┐          ┌──────────────────┐              │
+│  │  Frontend   │ ───────► │  Backend API     │              │
+│  │  (Vercel)   │  HTTPS   │  (Azure App)     │              │
+│  └─────────────┘          └────────┬─────────┘              │
+│                                     │                         │
+│                            ┌────────▼──────────┐             │
+│                            │  MySQL (Azure)    │             │
+│                            │  Production Data  │             │
+│                            └───────────────────┘             │
+└──────────────────────────────────────────────────────────────┘
 
-
-
-
-
----
-Cloud Architecture Diagram
-┌─────────────────────────────────────────────────────────────┐
-│  REPO 1: PRODUCTION FULLSTACK (recycle-marketplace)         │
-│  ┌──────────────┐        ┌──────────────┐                   │
-│  │   Frontend   │───────►│  Backend API │                   │
-│  │   (Vercel)   │        │  (Azure App) │                   │
-│  └──────────────┘        └───────┬──────┘                   │
-│                                   │                         │
-│                          ┌────────▼──────────┐              │
-│                          │  MySQL (Azure)    │              │
-│                          │  "Source of Truth"│              │
-│                          └────────┬──────────┘              │
-└──────────────────────────────────┼──────────────────────────┘
-                                    │
-                      Migration Scripts READ from here
-                                    │
-┌───────────────────────────────────▼───────────────────────────┐
-│  REPO 2: EXAM PROJECT (recycle-exam)                          │
-│  ┌──────────────────────────────────────────────────────┐     │
-│  │  Backend API (Local Docker)                          │     │
-│  │  ┌────────────────┐  ┌──────────────────┐           │      │
-│  │  │ MongoDB Router │  │  Neo4j Router    │           │      │
-│  │  └───────┬────────┘  └────────┬─────────┘           │      │
-│  │          │                    │                     │      │
-│  │  ┌───────▼────────┐  ┌────────▼─────────┐           │      │
-│  │  │ MongoDB Repo   │  │  Neo4j Repo      │           │      │
-│  │  └───────┬────────┘  └────────┬─────────┘           │      │
-│  └──────────┼────────────────────┼─────────────────────┘      │
-│             │                    │                            │
-│  ┌──────────▼──────────┐  ┌──────▼──────────────┐             │
-│  │ MongoDB Atlas       │  │ Neo4j AuraDB        │             │
-│  │ (Cloud Cluster)     │  │ (Cloud Graph)       │             │
-│  └─────────────────────┘  └─────────────────────┘             │
-└───────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ EXAM DEMO (this repository - deployed)                       │
+│                                                               │
+│  ┌────────────────────────────────────────────┐              │
+│  │  Backend API (Azure App Service)           │              │
+│  │  mongodb-neo4j-backend.azurewebsites.net   │              │
+│  │                                             │              │
+│  │  /mongodb/* ─────┐      /neo4j/* ─────┐   │              │
+│  └──────────────────┼──────────────────────┼───┘              │
+│                     │                      │                  │
+│        ┌────────────▼────────┐  ┌──────────▼───────────┐     │
+│        │  MongoDB Atlas      │  │  Neo4j Aura          │     │
+│        │  (Cloud Cluster)    │  │  (Cloud Graph)       │     │
+│        └─────────────────────┘  └──────────────────────┘     │
+│                                                               │
+│  CI/CD: GitHub Actions → Docker Hub → Azure                  │
+└──────────────────────────────────────────────────────────────┘
+```
