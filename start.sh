@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export POETRY_VIRTUALENVS_CREATE=false
+export POETRY_VIRTUALENVS_IN_PROJECT=false
+PYTHON_BIN="python"
+
 echo "[start] Backend initialization starting..."
 
 # Optional: skip migrations if MIGRATE_ON_START != true
 if [ "${MIGRATE_ON_START:-true}" != "true" ]; then
   echo "[start] MIGRATE_ON_START is not 'true' – skipping migrations."
-  exec poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
+  exec "${PYTHON_BIN}" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
 fi
 
 # Wait for MongoDB availability
@@ -42,10 +46,10 @@ PY
 
 # Run migrations (idempotent)
 echo "[migrate] Running MongoDB migration..."
-poetry run python scripts/migrate_to_mongodb.py
+"${PYTHON_BIN}" scripts/migrate_to_mongodb.py
 
 echo "[migrate] Running Neo4j migration..."
-poetry run python scripts/migrate_to_neo4j.py
+"${PYTHON_BIN}" scripts/migrate_to_neo4j.py
 
 echo "[start] Launching API server..."
-exec poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
+exec "${PYTHON_BIN}" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --no-access-log
