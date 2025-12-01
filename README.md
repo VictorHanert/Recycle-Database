@@ -31,6 +31,16 @@ docker compose up -d
 docker compose down
 ```
 
+### Automatic Migrations
+
+On container start the backend now automatically runs both migration scripts (MySQL → MongoDB and MySQL → Neo4j) before launching the API. They are idempotent (safe to re-run). 
+To skip this step and start the API directly, run:
+
+```bash
+MIGRATE_ON_START=false docker compose up -d --force-recreate python-backend
+```
+Logs will show `[migrate]` lines with counts.
+
 **Access Points:**
 - Backend API: `http://localhost:8001`
 - Swagger docs: `http://localhost:8001/docs`
@@ -173,7 +183,6 @@ app/
     neo4j/             # Neo4j async driver with Cypher
   models/
     mongodb/           # Pydantic models for validation
-    mysql/             # SQLAlchemy models (reference only)
 scripts/
   migrate_to_mongodb.py  # Transform MySQL → MongoDB
   migrate_to_neo4j.py    # Transform MySQL → Neo4j
@@ -188,10 +197,22 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 ```
 
 **Key Differences from MySQL Repository:**
-- ❌ No service layer (business logic inline in routers)
-- ❌ No file upload service (images stored as URLs only)
-- ✅ Direct repository → router pattern (simpler for document/graph operations)
-- ✅ Authorization checks inline (ownership via embedded data or relationships)
+- No service layer (logic kept in routers)
+- No file upload service (images as URLs)
+- Direct repository → router pattern
+- Authorization checks inline (embedded data or relationships)
+
+## MySQL Source & Migration Approach
+
+The MySQL schema is accessed only during migrations using **SQLAlchemy reflection** (no ORM model files kept). This keeps the repository minimal and focused on the document/graph implementations.
+
+Reflection benefits:
+- Zero maintenance of duplicate ORM models
+- Idempotent scripts (upserts / MERGE)
+- Easy re-run when source data changes
+
+Migration scripts: `scripts/migrate_to_mongodb.py`, `scripts/migrate_to_neo4j.py`.
+
 
 ---
 ## Architecture
@@ -243,16 +264,14 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ REPO 1: PRODUCTION FULLSTACK (recycle-marketplace)                   │
+│ REPO 1: ReCycle Fullstack                                            │
 │                                                                      │
 │  ┌────────────────────┐                                              │
-│  │  Frontend (React)  │  ← Can connect to EITHER backend             │
+│  │  Frontend (React)  │                                              │
 │  │  localhost:5173    │                                              │
 │  └─────────┬──────────┘                                              │
 │            │                                                         │
 │            │ HTTP to localhost:8000 (MySQL backend)                  │
-│            │    OR                                                   │
-│            │ HTTP to localhost:8001 (MongoDB/Neo4j backend)          │
 │            │                                                         │
 │  ┌─────────▼─────────────────────────────────────────────┐           │
 │  │  Backend API (FastAPI) - localhost:8000               │           │
@@ -277,26 +296,26 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 │              └─────────┬──────────┘                                  │
 └────────────────────────┼─────────────────────────────────────────────┘
                          │
-                         │ Migration Scripts READ from MySQL
+                         │ Migration Scripts READ and TRANSFORM data from MySQL
                          │
-┌────────────────────────▼─────────────────────────────────────────────┐
-│ REPO 2: EXAM PROJECT (this repository)                               │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Backend API (FastAPI) - localhost:8001                     │    │
-│  │                                                              │    │
+┌────────────────────────▼───────────────────────────────────────────┐
+│ REPO 2: DATABASE REPO                                              │
+│                                                                    │
+│  ┌────────────────────────────────────────────────────────────┐    │
+│  │  Backend API (FastAPI) - localhost:8001                    │    │
+│  │                                                            │    │
 │  │  ┌─────────────────────┐      ┌─────────────────────┐      │    │
 │  │  │  /mongodb/products  │      │  /neo4j/products    │      │    │
 │  │  │  /mongodb/users     │      │  /neo4j/users       │      │    │
 │  │  │  /mongodb/auth      │      │  /neo4j/auth        │      │    │
 │  │  └──────────┬──────────┘      └──────────┬──────────┘      │    │
-│  │             │                            │                  │    │
+│  │             │                            │                 │    │
 │  │  ┌──────────▼──────────┐      ┌──────────▼──────────┐      │    │
 │  │  │  MongoDB Repository │      │  Neo4j Repository   │      │    │
 │  │  │  (Motor/Pydantic)   │      │  (Cypher Queries)   │      │    │
 │  │  └──────────┬──────────┘      └──────────┬──────────┘      │    │
 │  └─────────────┼──────────────────────────────┼───────────────┘    │
-│                │                              │                      │
+│                │                              │                    │
 │   ┌────────────▼─────────────┐   ┌───────────▼────────────┐        │
 │   │  MongoDB (Docker)        │   │  Neo4j (Docker)        │        │
 │   │  localhost:27017         │   │  localhost:7687        │        │
@@ -304,12 +323,12 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 │   │  - Embedded Documents    │   │  - Nodes & Relations   │        │
 │   │  - Text Search           │   │  - Recommendations     │        │
 │   └──────────────────────────┘   └────────────────────────┘        │
-│                                                                      │
-│  docker-compose.yml orchestrates all containers:                    │
-│    - python-backend (FastAPI app)                                   │
-│    - mongo-db (MongoDB 8.0)                                         │
-│    - neo4j-db (Neo4j 5.x)                                           │
-└──────────────────────────────────────────────────────────────────────┘
+│                                                                    │
+│  docker-compose.yml orchestrates all containers:                   │
+│    - python-backend (FastAPI app)                                  │
+│    - mongo-db                                                      │
+│    - neo4j-db                                                      │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -319,12 +338,12 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ PRODUCTION (recycle-marketplace)                             │
-│                                                               │
-│  ┌─────────────┐          ┌──────────────────┐              │
-│  │  Frontend   │ ───────► │  Backend API     │              │
-│  │  (Vercel)   │  HTTPS   │  (Azure App)     │              │
-│  └─────────────┘          └────────┬─────────┘              │
-│                                     │                         │
+│                                                              │
+│  ┌─────────────┐          ┌──────────────────┐               │
+│  │  Frontend   │ ───────► │  Backend API     │               │
+│  │  (Vercel)   │  HTTPS   │  (Azure App)     │               │
+│  └─────────────┘          └────────┬─────────┘               │
+│                                     │                        │
 │                            ┌────────▼──────────┐             │
 │                            │  MySQL (Azure)    │             │
 │                            │  Production Data  │             │
@@ -332,20 +351,20 @@ docker-compose.yml      # MongoDB + Neo4j + Backend
 └──────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐
-│ EXAM DEMO (this repository - deployed)                       │
-│                                                               │
+│ DATABASE REPO (this repository - deployed)                   │
+│                                                              │
 │  ┌────────────────────────────────────────────┐              │
 │  │  Backend API (Azure App Service)           │              │
 │  │  mongodb-neo4j-backend.azurewebsites.net   │              │
-│  │                                             │              │
-│  │  /mongodb/* ─────┐      /neo4j/* ─────┐   │              │
-│  └──────────────────┼──────────────────────┼───┘              │
-│                     │                      │                  │
+│  │                                            │              │
+│  │  /mongodb/* ─────┐         /neo4j/* ────┐  │              │
+│  └──────────────────┼──────────────────────┼──┘              │
+│                     │                      │                 │
 │        ┌────────────▼────────┐  ┌──────────▼───────────┐     │
 │        │  MongoDB Atlas      │  │  Neo4j Aura          │     │
 │        │  (Cloud Cluster)    │  │  (Cloud Graph)       │     │
 │        └─────────────────────┘  └──────────────────────┘     │
-│                                                               │
+│                                                              │
 │  CI/CD: GitHub Actions → Docker Hub → Azure                  │
 └──────────────────────────────────────────────────────────────┘
 ```

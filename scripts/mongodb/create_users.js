@@ -4,12 +4,10 @@
 // Run this in MongoDB shell or with mongosh
 // ============================================
 
-// Switch to admin database to create users
-use admin;
-
 // ============================================
 // 1. APPLICATION USER (CRUD privileges only)
 // ============================================
+db = db.getSiblingDB('admin');
 db.createUser({
   user: "app_user",
   pwd: "app_secure_password",
@@ -63,7 +61,7 @@ print("✓ Created readonly_user with read-only access");
 // 4. RESTRICTED READ USER (Limited collections)
 // ============================================
 // First, create a custom role for restricted access
-use marketplace;
+db = db.getSiblingDB('marketplace');
 
 db.createRole({
   role: "restrictedReader",
@@ -91,7 +89,7 @@ db.createRole({
 print("✓ Created restrictedReader custom role");
 
 // Create the restricted user
-use admin;
+db = db.getSiblingDB('admin');
 
 db.createUser({
   user: "restricted_user",
@@ -109,7 +107,7 @@ print("✓ Created restricted_user with limited collection access");
 // ============================================
 // VERIFY USERS
 // ============================================
-use admin;
+db = db.getSiblingDB('admin');
 
 print("\n=== Database Users Created ===");
 db.system.users.find({}, { user: 1, roles: 1, _id: 0 }).forEach(printjson);

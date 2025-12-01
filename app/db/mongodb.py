@@ -44,9 +44,3 @@ async def init_mongodb():
     await db.products.create_index("seller_id")
     await db.products.create_index("status")
     await db.products.create_index([("title", "text"), ("description", "text")])  # Full-text search
-    
-    # Favorites and messages are not migrated to MongoDB (only users and products)
-    # These collections would be created if you add MongoDB-specific features
-    # await db.favorites.create_index([("user_id", 1), ("product_id", 1)], unique=True)
-    # await db.messages.create_index("conversation_id")
-    # await db.messages.create_index("participants.user_id")    print("MongoDB indexes created")

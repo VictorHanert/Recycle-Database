@@ -22,18 +22,17 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
-    # MongoDB Configuration (optional)
+    # Relational (MySQL) source database for migrations
+    database_url: str = "mysql+pymysql://root:root@mysql-db:3306/marketplace"
+
+    # MongoDB Configuration
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_database: str = "marketplace"
 
-    # Neo4j Configuration (optional)
+    # Neo4j Configuration
     neo4j_url: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "password"
-
-    # Azure Storage Configuration
-    azure_storage_connection_string: str = ""
-    storage_mode: str = "local"  # "local" or "azure"
 
     class Config:
         """Pydantic configuration."""
