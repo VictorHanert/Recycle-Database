@@ -86,6 +86,23 @@ services:
     networks:
       - internal
 
+  neo4j-init:
+    image: neo4j:5.22
+    depends_on:
+      neo4j-db:
+        condition: service_started
+    command: >
+      bash -c '
+      for i in {1..15}; do
+        cypher-shell -u neo4j -p neo4j_pass --address bolt://neo4j-db:7687 "RETURN 1" && break || sleep 2;
+      done;
+      cypher-shell -u neo4j -p neo4j_pass --address bolt://neo4j-db:7687 < /scripts/create_users.cypher
+      '
+    volumes:
+      - ./scripts/neo4j/create_users.cypher:/scripts/create_users.cypher:ro
+    networks:
+      - internal
+
 volumes:
   mongo_data:
   neo4j_data:
