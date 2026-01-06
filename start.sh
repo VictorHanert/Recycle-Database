@@ -14,34 +14,44 @@ if [ "${MIGRATE_ON_START:-true}" != "true" ]; then
 fi
 
 # Wait for MongoDB availability
+echo "[wait] Waiting for MongoDB to be ready..."
 python - <<'PY'
 import time
 from pymongo import MongoClient
 from app.config import get_settings
 settings = get_settings()
-for attempt in range(20):
+for attempt in range(30):
     try:
-        MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=2000).admin.command('ping')
-        print(f"[wait] MongoDB ready after {attempt+1} attempt(s).")
+        MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=3000).admin.command('ping')
+        print(f"[wait] ✓ MongoDB ready after {attempt+1} attempt(s).")
         break
-    except Exception:
-        time.sleep(2)
+    except Exception as e:
+        if attempt == 29:
+            print(f"[wait] ✗ MongoDB failed to connect after 30 attempts: {e}")
+            raise
+        print(f"[wait] MongoDB not ready (attempt {attempt+1}/30), retrying...")
+        time.sleep(3)
 PY
 
 # Wait for Neo4j availability
+echo "[wait] Waiting for Neo4j to be ready..."
 python - <<'PY'
 import time
 from neo4j import GraphDatabase
 from app.config import get_settings
 settings = get_settings()
-for attempt in range(20):
+for attempt in range(30):
     try:
         with GraphDatabase.driver(settings.neo4j_url, auth=(settings.neo4j_user, settings.neo4j_password)) as drv:
             drv.verify_connectivity()
-        print(f"[wait] Neo4j ready after {attempt+1} attempt(s).")
+        print(f"[wait] ✓ Neo4j ready after {attempt+1} attempt(s).")
         break
-    except Exception:
-        time.sleep(2)
+    except Exception as e:
+        if attempt == 29:
+            print(f"[wait] ✗ Neo4j failed to connect after 30 attempts: {e}")
+            raise
+        print(f"[wait] Neo4j not ready (attempt {attempt+1}/30), retrying...")
+        time.sleep(3)
 PY
 
 # Run migrations (idempotent)

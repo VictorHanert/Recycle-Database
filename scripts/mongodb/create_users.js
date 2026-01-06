@@ -8,54 +8,75 @@
 // 1. APPLICATION USER (CRUD privileges only)
 // ============================================
 db = db.getSiblingDB('admin');
-db.createUser({
-  user: "app_user",
-  pwd: "app_secure_password",
-  roles: [
-    {
-      role: "readWrite",
-      db: "marketplace"
-    }
-  ]
-});
-
-print("✓ Created app_user with readWrite access to marketplace database");
+try {
+  db.createUser({
+    user: "app_user",
+    pwd: "app_secure_password",
+    roles: [
+      {
+        role: "readWrite",
+        db: "marketplace"
+      }
+    ]
+  });
+  print("✓ Created app_user with readWrite access to marketplace database");
+} catch (e) {
+  if (e.code === 51003) {
+    print("✓ app_user already exists, skipping creation");
+  } else {
+    throw e;
+  }
+}
 
 // ============================================
 // 2. ADMIN USER (Full privileges)
 // ============================================
-db.createUser({
-  user: "db_admin",
-  pwd: "admin_secure_password",
-  roles: [
-    {
-      role: "dbOwner",
-      db: "marketplace"
-    },
-    {
-      role: "userAdmin",
-      db: "marketplace"
-    }
-  ]
-});
-
-print("✓ Created db_admin with full database owner privileges");
+try {
+  db.createUser({
+    user: "db_admin",
+    pwd: "admin_secure_password",
+    roles: [
+      {
+        role: "dbOwner",
+        db: "marketplace"
+      },
+      {
+        role: "userAdmin",
+        db: "marketplace"
+      }
+    ]
+  });
+  print("✓ Created db_admin with full database owner privileges");
+} catch (e) {
+  if (e.code === 51003) {
+    print("✓ db_admin already exists, skipping creation");
+  } else {
+    throw e;
+  }
+}
 
 // ============================================
 // 3. READ-ONLY USER (For analytics, reports)
 // ============================================
-db.createUser({
-  user: "readonly_user",
-  pwd: "readonly_password",
-  roles: [
-    {
-      role: "read",
-      db: "marketplace"
-    }
-  ]
-});
-
-print("✓ Created readonly_user with read-only access");
+try {
+  db.createUser({
+    user: "readonly_user",
+    pwd: "readonly_password",
+    roles: [
+      {
+        role: "read",
+        db: "marketplace"
+      }
+    ]
+  });
+  print("✓ Created readonly_user with read-only access");
+} catch (e) {
+  if (e.code === 51003) {
+    print("✓ readonly_user already exists, skipping creation");
+  } else {
+    throw e;
+  }
+}
 
 // ============================================
 // 4. RESTRICTED READ USER (Limited collections)
@@ -63,46 +84,60 @@ print("✓ Created readonly_user with read-only access");
 // First, create a custom role for restricted access
 db = db.getSiblingDB('marketplace');
 
-db.createRole({
-  role: "restrictedReader",
-  privileges: [
-    {
-      resource: { db: "marketplace", collection: "products" },
-      actions: ["find"]
-    },
-    {
-      resource: { db: "marketplace", collection: "categories" },
-      actions: ["find"]
-    },
-    {
-      resource: { db: "marketplace", collection: "locations" },
-      actions: ["find"]
-    },
-    {
-      resource: { db: "marketplace", collection: "product_views" },
-      actions: ["find"]
-    }
-  ],
-  roles: []
-});
-
-print("✓ Created restrictedReader custom role");
+try {
+  db.createRole({
+    role: "restrictedReader",
+    privileges: [
+      {
+        resource: { db: "marketplace", collection: "products" },
+        actions: ["find"]
+      },
+      {
+        resource: { db: "marketplace", collection: "categories" },
+        actions: ["find"]
+      },
+      {
+        resource: { db: "marketplace", collection: "locations" },
+        actions: ["find"]
+      },
+      {
+        resource: { db: "marketplace", collection: "product_views" },
+        actions: ["find"]
+      }
+    ],
+    roles: []
+  });
+  print("✓ Created restrictedReader custom role");
+} catch (e) {
+  if (e.code === 51002) {
+    print("✓ restrictedReader role already exists, skipping creation");
+  } else {
+    throw e;
+  }
+}
 
 // Create the restricted user
 db = db.getSiblingDB('admin');
 
-db.createUser({
-  user: "restricted_user",
-  pwd: "restricted_password",
-  roles: [
-    {
-      role: "restrictedReader",
-      db: "marketplace"
-    }
-  ]
-});
-
-print("✓ Created restricted_user with limited collection access");
+try {
+  db.createUser({
+    user: "restricted_user",
+    pwd: "restricted_password",
+    roles: [
+      {
+        role: "restrictedReader",
+        db: "marketplace"
+      }
+    ]
+  });
+  print("✓ Created restricted_user with limited collection access");
+} catch (e) {
+  if (e.code === 51003) {
+    print("✓ restricted_user already exists, skipping creation");
+  } else {
+    throw e;
+  }
+}
 
 // ============================================
 // VERIFY USERS

@@ -1,0 +1,717 @@
+{
+  "info": {
+    "name": "Marketplace API - MongoDB & Neo4j",
+    "description": "Complete API collection for testing both document (MongoDB) and graph (Neo4j) database endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Info",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            }
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "MongoDB - Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('mongodb_token', jsonData.access_token);",
+                  "    pm.environment.set('mongodb_user_id', jsonData.user._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"full_name\": \"{{full_name}}\",\n  \"phone\": \"+45 12345678\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mongodb/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('mongodb_token', jsonData.access_token);",
+                  "    pm.environment.set('mongodb_user_id', jsonData.user._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mongodb/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "MongoDB - Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/users?skip=0&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "users"],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/users/{{mongodb_user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "users", "{{mongodb_user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get User by Username",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/users/username/{{username}}",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "users", "username", "{{username}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/users/{{mongodb_user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "users", "{{mongodb_user_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "MongoDB - Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('mongodb_product_id', jsonData._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Vintage Bicycle\",\n  \"description\": \"Well-maintained vintage bike in excellent condition\",\n  \"price_amount\": 500.00,\n  \"price_currency\": \"DKK\",\n  \"product_condition\": \"used\",\n  \"colors\": [\"blue\", \"white\"],\n  \"materials\": [\"metal\", \"rubber\"],\n  \"tags\": [\"bicycle\", \"vintage\", \"transport\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mongodb/products",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products"]
+            }
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products?skip=0&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products"],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/{{mongodb_product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "{{mongodb_product_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/search?q=bicycle&skip=0&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "bicycle"
+                },
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/filter?status=active&skip=0&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "filter"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                },
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "seller_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "category_id",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Popular Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/popular?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "popular"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Top Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/top-categories?limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "top-categories"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Vintage Bicycle - Updated\",\n  \"description\": \"Updated description\",\n  \"price_amount\": 450.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/{{mongodb_product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "{{mongodb_product_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Mark Product as Sold",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/{{mongodb_product_id}}/mark-sold",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "{{mongodb_product_id}}", "mark-sold"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Product Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/{{mongodb_product_id}}/toggle-status",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "{{mongodb_product_id}}", "toggle-status"]
+            }
+          }
+        },
+        {
+          "name": "Record Product View",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/{{mongodb_product_id}}/view",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "{{mongodb_product_id}}", "view"]
+            }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mongodb_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mongodb/products/{{mongodb_product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["mongodb", "products", "{{mongodb_product_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Neo4j - Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('neo4j_token', jsonData.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"neo4j_{{username}}\",\n  \"email\": \"neo4j_{{email}}\",\n  \"password\": \"{{password}}\",\n  \"full_name\": \"Neo4j {{full_name}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/neo4j/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('neo4j_token', jsonData.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"neo4j_{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/neo4j/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Neo4j - Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{neo4j_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/neo4j/users?skip=0&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "users"],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User by Username",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{neo4j_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/neo4j/users/neo4j_{{username}}",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "users", "neo4j_{{username}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Neo4j - Products",
+      "item": [
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('neo4j_product_id', jsonData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{neo4j_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Neo4j Vintage Bicycle\",\n  \"description\": \"Graph database test product\",\n  \"price_amount\": 600.00,\n  \"price_currency\": \"DKK\",\n  \"product_condition\": \"used\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/neo4j/products",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "products"]
+            }
+          }
+        },
+        {
+          "name": "Get All Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/neo4j/products?skip=0&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "products"],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/neo4j/products/{{neo4j_product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "products", "{{neo4j_product_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Products by Seller",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/neo4j/products/seller/neo4j_{{username}}",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "products", "seller", "neo4j_{{username}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{neo4j_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Neo4j Bicycle - Updated\",\n  \"price_amount\": 550.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/neo4j/products/{{neo4j_product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "products", "{{neo4j_product_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{neo4j_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/neo4j/products/{{neo4j_product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["neo4j", "products", "{{neo4j_product_id}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
